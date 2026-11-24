@@ -68,6 +68,11 @@ mkdir -p "$root/usr/local/lib/enginex-preview/plugins/generic"
 # executable helpers/plugins on this copied root's normal program filesystem.
 cp "$work/bridge.so" "$root/usr/local/lib/enginex-preview/plugins/generic/libenginexpreview.so"
 cp "$work/egl-preview.so" "$root/usr/local/lib/enginex-preview/egl-preview.so"
+loader=$(patchelf --print-interpreter "$root/usr/Engine/Engine")
+if ! run "$loader" --list /opt/enginex-preview-mesa/usr/lib/arm-linux-gnueabihf/libEGL_mesa.so.0 > "$work/mesa-deps.log" 2>&1; then
+    tail -25 "$work/mesa-deps.log" >&2
+    exit 1
+fi
 if [ "$PREVIEW_MODE" = smoke ]; then
     cp "$PREVIEW_REPO/tools/preview/smoke-target.qml" "$root/tmp/preview/smoke-target.qml"
     for pack in "$work/data/enginex/ui/packs/"*; do

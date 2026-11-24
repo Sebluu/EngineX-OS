@@ -20,10 +20,17 @@ fi
 prefix=/opt/enginex-preview-mesa
 mkdir -p "$work/root$prefix"
 cp -a "$mesa/root/." "$work/root$prefix/"
+library_path="$prefix/usr/lib/arm-linux-gnueabihf:$prefix/lib/arm-linux-gnueabihf"
+# dlopen from a vendor Qt plugin does not inherit the executable's path for
+# every transitive Mesa/LLVM dependency. Keep that whole runtime self-contained.
+while IFS= read -r -d '' library; do
+    case "$library" in */ld-linux-armhf.so.3|*/libc.so.6) continue ;; esac
+    patchelf --force-rpath --set-rpath "$library_path:\$ORIGIN" "$library"
+done < <(find "$work/root$prefix/usr/lib" -type f -name '*.so*' -print0)
 loader=$(find "$mesa/root" -type f -name ld-linux-armhf.so.3 -print -quit)
 [ -n "$loader" ] || { echo 'Preview Mesa ARM loader missing' >&2; exit 1; }
 # Only this private Engine copy gets the matching loader and transitive runtime
 # search path. Its subprocesses retain their original vendor loader/libraries.
 patchelf --set-interpreter "$prefix${loader#"$mesa/root"}" \
-    --force-rpath --set-rpath "$prefix/usr/lib/arm-linux-gnueabihf:$prefix/lib/arm-linux-gnueabihf:/usr/qt/lib:/usr/lib:/lib" \
+    --force-rpath --set-rpath "$library_path:/usr/qt/lib:/usr/lib:/lib" \
     "$work/root/usr/Engine/Engine"
