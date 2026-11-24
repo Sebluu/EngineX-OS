@@ -5,6 +5,8 @@ ROOT=$(cd "$(dirname "$0")/.." && pwd)
 export ENGINEX_MIGRATION=${ENGINEX_MIGRATION:-$ROOT/rootfs-overlay/usr/libexec/enginex-migration}
 GUARD=${BOOT_GUARD_TEST_TARGET:-$ROOT/rootfs-overlay/etc/enginex/engine-ui-guard}
 W=$(mktemp -d "$ROOT/tests/.tmp.boot-safety.XXXXXX")
+# Keep the guard's boot-local sentinel inside this fixture, including on non-root CI.
+export ENGINEX_GUARD_PRE_MARK=$W/guard-pre-mark
 pids=()
 cleanup() { for p in "${pids[@]}"; do kill "$p" 2>/dev/null || :; done; wait 2>/dev/null || :; rm -rf "$W"; }
 trap cleanup EXIT

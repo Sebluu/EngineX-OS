@@ -1,9 +1,18 @@
+import QtQuick 2.12
+import QtQuick.Controls 2.5 as ODC
+import QtQuick.Layouts 1.12 as ODL
+
 Rectangle {
     id: odPanel
-    visible: false; z: 100000; anchors.centerIn: parent
+    visible: true; z: 100000; anchors.centerIn: parent
     width: Math.min(parent.width-32,920); height: Math.min(parent.height-32,580)
     color: "#131b24"; radius: 8
-    property string section: "eq"
+    property string section: "@SECTION@"
+    signal closed()
+    property var pending: null
+    Component.onCompleted: request(null)
+    Component.onDestruction: if(pending)pending.abort()
+    Timer { id: requestTimeout; interval: 3000; onTriggered: {if(odPanel.pending)odPanel.pending.abort();odPanel.pending=null;odPanel.busy=false;odPanel.message="DSP unavailable. Check the enabled Mod and native core."} }
     property bool advanced: false
     property bool busy: false
     property int pair: 0
@@ -14,21 +23,25 @@ Rectangle {
     function request(body) {
         if(busy)return
         busy=true
-        var x=new XMLHttpRequest()
+        var x=new XMLHttpRequest();pending=x;requestTimeout.restart()
         x.open(body?"POST":"GET","http://127.0.0.1:8080/v1/enginex/output-dsp")
         if(body)x.setRequestHeader("Content-Type","application/json")
         x.onreadystatechange=function(){
             if(x.readyState!==4)return
-            busy=false
+            requestTimeout.stop();pending=null;busy=false
             if(x.status!==200){message="DSP request failed: "+x.status;return}
-            profiles=JSON.parse(x.responseText);vals=profiles[pair].slice()
-            root.odSubEnabled=profiles[0][2]===1
-            dirty=false;message="Saved settings"
+            try {
+                var data=JSON.parse(x.responseText), bit=section==="eq"?1:2
+                if(data.version!==1 || !(data.enabled&bit) || !data.profiles || data.profiles.length!==4)throw new Error("Matching native core and enabled Mod required")
+                for(var i=0;i<4;i++){if(data.profiles[i].length!==35)throw new Error("Invalid profile");for(var j=0;j<35;j++)if(typeof data.profiles[i][j]!=="number"||!isFinite(data.profiles[i][j]))throw new Error("Invalid value")}
+                profiles=data.profiles;vals=profiles[pair].slice()
+                dirty=false;message=body?"Saved settings":"Ready"
+            } catch(e) { vals=[];message="DSP unavailable: "+e.message }
         }
         x.send(body?JSON.stringify(body):null)
     }
     function change(i,v){
-        if(vals.length!==35)return
+        if(busy||vals.length!==35)return
         var a=vals.slice()
         if(i===4)v=Math.max(v,a[5]+5)
         if(i===5)v=Math.min(v,a[4]-5)
@@ -37,6 +50,21 @@ Rectangle {
     function select(i){
         if(busy||dirty||profiles.length!==4)return
         pair=i;vals=profiles[i].slice()
+    }
+    // RBJ coefficients match the native filters. 48 kHz is a preview rate.
+    function response(type,hz,q,db,f) {
+        if(hz<=0 || (type<3 && db===0))return 0
+        var w=2*Math.PI*Math.min(hz,48000*.46)/48000, s=Math.sin(w), c=Math.cos(w)
+        var A=Math.pow(10,db/40), al=s/(2*q), b0,b1,b2,a0,a1,a2
+        if(type===0){b0=1+al*A;b1=-2*c;b2=1-al*A;a0=1+al/A;a1=-2*c;a2=1-al/A}
+        else if(type===1||type===2){
+            var t=2*Math.sqrt(A)*al,m=A-1,p=A+1
+            if(type===1){b0=A*(p-m*c+t);b1=2*A*(m-p*c);b2=A*(p-m*c-t);a0=p+m*c+t;a1=-2*(m+p*c);a2=p+m*c-t}
+            else {b0=A*(p+m*c+t);b1=-2*A*(m+p*c);b2=A*(p+m*c-t);a0=p-m*c+t;a1=2*(m-p*c);a2=p-m*c-t}
+        } else {b0=(1+c)*.5;b1=-2*b0;b2=b0;a0=1+al;a1=-2*c;a2=1-al}
+        var z=2*Math.PI*f/48000, cr=Math.cos(z), ci=Math.sin(z), dr=Math.cos(2*z), di=Math.sin(2*z)
+        var nr=b0+b1*cr+b2*dr,ni=b1*ci+b2*di,ar=a0+a1*cr+a2*dr,ai=a1*ci+a2*di
+        return 10*Math.log(Math.max(1e-16,(nr*nr+ni*ni)/(ar*ar+ai*ai)))/Math.LN10
     }
     onValsChanged: if(odGraph)odGraph.requestPaint()
     MouseArea { anchors.fill: parent; onClicked: {} }
@@ -47,7 +75,7 @@ Rectangle {
             Item {ODL.Layout.fillWidth:true}
             ODC.Switch {text:"Advanced";checked:odPanel.advanced;onToggled:odPanel.advanced=checked}
             ODC.Button {text:"Apply";enabled:!odPanel.busy&&odPanel.vals.length===35&&odPanel.dirty;onClicked:odPanel.request({section:odPanel.section,pair:odPanel.pair,values:odPanel.vals})}
-            ODC.Button {text:odPanel.dirty?"Discard / close":"Close";enabled:!odPanel.busy;onClicked:odPanel.visible=false}
+            ODC.Button {text:odPanel.dirty?"Discard / close":"Close";onClicked:odPanel.closed()}
         }
         ODL.RowLayout {
             Repeater {
@@ -80,15 +108,16 @@ Rectangle {
                         for(var k=0;k<width;k++){
                             var f=10*Math.pow(2200,k/width),g=0
                             if(v[0]){
-                                for(var b=0;b<8;b++){var j=11+3*b,u=Math.log(f/v[j]);g+=v[j+2]*(b===0?1/(1+Math.exp(4*u)):b===7?1/(1+Math.exp(-4*u)):Math.exp(-u*u*v[j+1]*v[j+1]))}
-                                if(v[1])g-=10*Math.log(1+Math.pow(v[1]/f,8))/Math.LN10
+                                for(var b=0;b<8;b++){var j=11+3*b;g+=odPanel.response(b===0?1:b===7?2:0,v[j],v[j+1],v[j+2],f)}
+                                if(v[1])g+=odPanel.response(3,v[1],.541196,0,f)+odPanel.response(3,v[1],1.306563,0,f)
                             }
                             var y=Math.max(3,Math.min(height-18,height/2-g*3));if(k===0)ctx.moveTo(k,y);else ctx.lineTo(k,y)
                         }ctx.stroke()
                     }
                 }
-                ODC.Label {visible:odPanel.section==="eq" && @EQ@;text:"10 Hz – 22 kHz · approximate response";color:"#9ab4c6"}
+                ODC.Label {visible:odPanel.section==="eq" && @EQ@;text:"10 Hz – 22 kHz · calculated response at 48 kHz";color:"#9ab4c6"}
                 Row {
+                    enabled:!odPanel.busy && odPanel.vals.length===35
                     visible:odPanel.section==="eq" && @EQ@;spacing:5
                     Repeater {
                         model:8
@@ -109,11 +138,12 @@ Rectangle {
                     }
                 }
                 ODC.Label {visible:odPanel.section==="eq" && @EQ@;text:"Highpass · 24 dB/oct · "+(odPanel.vals[1]||0)+" Hz (0 = off)";color:"white"}
-                ODC.Slider {visible:odPanel.section==="eq" && @EQ@;width:parent.width;from:0;to:150;stepSize:5;value:odPanel.vals[1]||0;onMoved:odPanel.change(1,value<10?0:value)}
-                ODC.Switch {visible:odPanel.section==="sub" && @SUB@;text:"SUB · octave-down synthesizer";checked:odPanel.vals[2]===1;onToggled:odPanel.change(2,checked?1:0)}
+                ODC.Slider {enabled:!odPanel.busy && odPanel.vals.length===35;visible:odPanel.section==="eq" && @EQ@;width:parent.width;from:0;to:150;stepSize:5;value:odPanel.vals[1]||0;onMoved:odPanel.change(1,value<10?0:value)}
+                ODC.Switch {enabled:!odPanel.busy && odPanel.vals.length===35;visible:odPanel.section==="sub" && @SUB@;text:"SUB · octave-down synthesizer";checked:odPanel.vals[2]===1;onToggled:odPanel.change(2,checked?1:0)}
                 Repeater {
                     model:[{i:3,t:"Strength %",lo:0,hi:100},{i:4,t:"Maximum sub frequency Hz",lo:30,hi:80},{i:5,t:"Minimum sub frequency Hz",lo:15,hi:55},{i:6,t:"Low band %",lo:0,hi:100},{i:7,t:"High band %",lo:0,hi:100},{i:8,t:"Detection threshold dBFS",lo:-80,hi:-12},{i:9,t:"Attack ms",lo:2,hi:100},{i:10,t:"Release ms",lo:20,hi:500}]
                     ODL.RowLayout {
+                        enabled:!odPanel.busy && odPanel.vals.length===35
                         visible:odPanel.section==="sub" && @SUB@ && (index<2||odPanel.advanced);width:odPanel.width-60
                         ODC.Label {text:modelData.t;color:"white";ODL.Layout.preferredWidth:240}
                         ODC.Slider {ODL.Layout.fillWidth:true;from:modelData.lo;to:modelData.hi;stepSize:1;value:odPanel.vals[modelData.i]||0;onMoved:odPanel.change(modelData.i,value)}
@@ -124,3 +154,4 @@ Rectangle {
         }
     }
 }
+
