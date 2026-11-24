@@ -25,9 +25,14 @@ Engine automatically. The standard loader owns restoration and quarantine.
 
 Tests use real pinned module sources, Qt 5 state fixtures, reproducible
 archives, unknown-source refusal and the actual Go Mod loader in temporary
-directories. Their simulated loader restart is not a physical power-on test.
-Actual controller-QML startup, restart/fallback and visible hardware LED
-traffic remain release gates. This source and the generated experimental
+directories. The integrated [original-rootfs gate](https://github.com/Sebluu/EngineX-OS/actions/runs/45318348421)
+also passed 186 checks: this Mod stays enabled with exact overlay contents
+across Engine startup, abrupt process loss and another Engine startup on the
+same data. It uses QEMU and synthetic devices; it does not exercise physical
+controller traffic or a real kernel power-on.
+
+Actual controller-QML startup, forced-hang stock handback and visible hardware
+LED traffic remain release gates. This source and the generated experimental
 archive are not approved for deck installation.
 
 The read-only inspect_button_leds.py evidence collector remains available for
