@@ -2,7 +2,7 @@ name: PRIME 4 LED evidence tests
 on:
   push:
     branches: [feature/button-led-behavior, test/all-features]
-    paths: ['tools/ui-mod/*button_led*', 'docs/prime4-steady-button-leds.md', '.github/workflows/button-led-review.yml']
+    paths: ['tools/ui-mod/*button_led*', 'docs/prime4-steady-button-leds.md', 'tools/mods/*prime4_led*', 'docs/mods/src/prime4-steady-leds/**', '.github/workflows/button-led-review.yml']
   workflow_dispatch:
 permissions:
   contents: read
@@ -13,3 +13,4 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: python3 -m unittest discover -s tools/ui-mod -p 'test_button_led_review.py'
+      - run: python3 -m unittest discover -s tools/mods -p 'test_prime4_led_mod.py'
