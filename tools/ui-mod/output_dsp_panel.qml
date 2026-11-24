@@ -7,7 +7,7 @@ Item {
     signal closed()
     ODC.Popup {
         id: odDialog
-        palette.windowText: "#e3eaf5"; palette.text: "#e3eaf5"
+        palette.windowText: "#e3eaf5"
         objectName: "outputDSPDialog"
         parent: ODC.Overlay.overlay
         visible: odHost.visible; modal: true; focus: true; padding: 0; z: 100000
@@ -87,7 +87,7 @@ Item {
             Item {ODL.Layout.fillWidth:true}
             ODC.Switch {text:"Advanced";checked:odPanel.advanced;onToggled:odPanel.advanced=checked}
             ODC.Button {objectName:"outputDSPApply";text:"Apply";enabled:!odPanel.busy&&odPanel.vals.length===35&&odPanel.dirty;onClicked:odPanel.request({section:odPanel.section,pair:odPanel.pair,values:odPanel.vals})}
-            ODC.Button {objectName:"outputDSPClose";text:odPanel.dirty?"Discard / close":"Close";onClicked:odPanel.closed()}
+            ODC.Button {objectName:"outputDSPClose";ODL.Layout.minimumWidth:160;ODL.Layout.maximumWidth:160;text:odPanel.dirty?"Discard / close":"Close";onClicked:odPanel.closed()}
         }
         ODL.RowLayout {
             Repeater {
