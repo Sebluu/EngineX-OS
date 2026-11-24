@@ -6,8 +6,6 @@
 #include <QImage>
 #include <QKeyEvent>
 #include <QMouseEvent>
-#include <QOpenGLContext>
-#include <QOpenGLFunctions>
 #include <QPointer>
 #include <QQuickWindow>
 #include <QQuickItem>
@@ -86,13 +84,6 @@ QQuickWindow *window() {
     if (largest) {
         largest->resize(1280, 800);
         largest->requestActivate();
-        QObject::connect(largest, &QQuickWindow::beforeRendering, largest, [] {
-            static bool logged = false;
-            auto *context = QOpenGLContext::currentContext();
-            if (logged || !context) return;
-            const auto *renderer = context->functions()->glGetString(GL_RENDERER);
-            if (renderer) { fprintf(stderr, "PREVIEW_GL_RENDERER %s\n", renderer); logged = true; }
-        }, Qt::DirectConnection);
         const char *smoke = getenv("ENGINEX_PREVIEW_SMOKE");
         if (smoke && *smoke) new RenderProbe(largest->contentItem());
     }

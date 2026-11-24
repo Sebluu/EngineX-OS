@@ -4,6 +4,7 @@
 #include <dlfcn.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <stdatomic.h>
 #include <string.h>
 #include <unistd.h>
 #include <EGL/egl.h>
@@ -34,6 +35,23 @@ EGLDisplay eglGetDisplay(EGLNativeDisplayType native) {
     typedef EGLDisplay (*display_fn)(EGLNativeDisplayType);
     display_fn get = (display_fn)dlsym(RTLD_NEXT, "eglGetDisplay");
     return get ? get(native) : EGL_NO_DISPLAY;
+}
+
+EGLBoolean eglMakeCurrent(EGLDisplay display, EGLSurface draw, EGLSurface read, EGLContext context) {
+    typedef EGLBoolean (*current_fn)(EGLDisplay, EGLSurface, EGLSurface, EGLContext);
+    current_fn current = (current_fn)dlsym(RTLD_NEXT, "eglMakeCurrent");
+    EGLBoolean result = current ? current(display, draw, read, context) : EGL_FALSE;
+    static atomic_int logged;
+    if (result && context != EGL_NO_CONTEXT && enabled() && !atomic_exchange(&logged, 1)) {
+        typedef void (*function_ptr)(void);
+        typedef function_ptr (*resolve_fn)(const char *);
+        typedef const unsigned char *(*string_fn)(unsigned int);
+        resolve_fn resolve = (resolve_fn)dlsym(RTLD_NEXT, "eglGetProcAddress");
+        string_fn string = resolve ? (string_fn)resolve("glGetString") : NULL;
+        const unsigned char *renderer = string ? string(0x1F01 /* GL_RENDERER */) : NULL;
+        if (renderer) fprintf(stderr, "PREVIEW_GL_RENDERER %s\n", (const char *)renderer);
+    }
+    return result;
 }
 
 EGLBoolean eglChooseConfig(EGLDisplay display, const EGLint *attributes,
