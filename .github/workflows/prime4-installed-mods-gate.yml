@@ -6,6 +6,9 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
+concurrency:
+  group: prime4-installed-mods-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
   rootfs:
     runs-on: ubuntu-24.04
@@ -53,7 +56,7 @@ jobs:
           cp -a rootfs-overlay "$task_work/overlay"
           rm -f "$task_work/overlay/README.md"
           mkdir -p "$task_work/overlay/usr/share/enginex" "$task_work/overlay/usr/local/lib/enginex"
-          printf '%s\n' 'v5.3.0.5-r1' > "$task_work/overlay/etc/enginex/release-tag"
+          printf '%s\n' 'v5.3.0.5-r2' > "$task_work/overlay/etc/enginex/release-tag"
           xz -T0 --check=crc32 --lzma2=preset=9e,dict=8MiB,lc=0,lp=2,pb=2 -c "$task_work/enginex-suite" > "$task_work/overlay/usr/share/enginex/enginex-suite.xz"
           gzip -dc "$task_work/packs.tar.gz" | xz -T0 --check=crc32 --lzma2=preset=9e,dict=8MiB -c > "$task_work/overlay/usr/share/enginex/ui-packs.tar.xz"
           install -m0755 "$task_work/libengine-ui-hook.so" "$task_work/overlay/etc/enginex/libengine-ui-hook.so"
@@ -77,7 +80,7 @@ jobs:
           task_work="$RUNNER_TEMP/jc11-gate"
           # Root privileges are confined to this disposable runner. The gate drops SYS_TIME
           # and creates private mount/PID/network namespaces; dangerous deck commands are shimmed.
-          sudo env "PATH=$PATH" "GITHUB_ACTIONS=true" "RUNNER_TEMP=$RUNNER_TEMP" "GOCACHE=$task_work/go-cache" "GATE_MODS_CHECKER=$task_work/mod-checker" GATE_RELEASE_TAG=v5.3.0.5-r1 GATE_ENGINE_START=300 bash tools/az01-packer/.prime4-installed-mods-gate.sh "$task_work/old/$OLD_NAME" "$task_work/candidate/$OLD_NAME" 5.3.0.5 "$task_work/gate"
+          sudo env "PATH=$PATH" "GITHUB_ACTIONS=true" "RUNNER_TEMP=$RUNNER_TEMP" "GOCACHE=$task_work/go-cache" "GATE_MODS_CHECKER=$task_work/mod-checker" GATE_RELEASE_TAG=v5.3.0.5-r2 GATE_ENGINE_START=300 bash tools/az01-packer/.prime4-installed-mods-gate.sh "$task_work/old/$OLD_NAME" "$task_work/candidate/$OLD_NAME" 5.3.0.5 "$task_work/gate"
       - name: Record bounded non-binary gate evidence
         if: always()
         run: |
