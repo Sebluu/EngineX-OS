@@ -17,6 +17,8 @@ with Mesa rendering on the VM's CPU. This renders custom geometry and shader
 effects which the simpler Qt raster backend omitted. It can respond slowly;
 the host GPU is not passed into the VM.
 
+![Local browser preview with CPU-rendered OpenGL](assets/screenshots/desktop-preview-opengl.png)
+
 ## Start on Linux
 
 The launcher currently supports Linux x86_64, including Ubuntu. Allow about
@@ -105,4 +107,10 @@ These checks do not replace testing an actual PRIME 4.
 
 The complete Linux VM setup was also exercised from a fresh disk, including
 the browser HTTP interface, feedback export, application restart, clean VM
-shutdown and a second boot: [verification run](https://github.com/Sebluu/EngineX-OS/actions/runs/45397402201).
+shutdown and a second boot. The upgrade test starts with the previous raster
+preview, retains non-default DSP settings on the same disk, installs the new
+renderer and performs another full shutdown and ordinary start. Screenshots
+wait for the application UI rather than accepting the startup splash, and
+navigation skips Wi-Fi/profile setup to capture the library/onboarding view.
+
+[OpenGL, navigation and VM upgrade verification](https://github.com/Sebluu/EngineX-OS/actions/runs/45446366625)
