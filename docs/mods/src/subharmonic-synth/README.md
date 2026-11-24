@@ -1,4 +1,4 @@
-# Subharmonic Synthesizer 0.1.0 (experimental)
+# Subharmonic Synthesizer 0.1.1 (experimental)
 
 QML-only Mod for the original PRIME 4 (JC11), paired with the matching native
 output DSP core. This source is not approved for deck installation. Installing
@@ -10,7 +10,9 @@ off, 25% strength and 25–56 Hz output filtering. Advanced controls expose inpu
 band strengths, threshold, attack, release and the lower generated-frequency
 cutoff. This is additive octave synthesis; the cutoffs are filter transitions,
 not absolute bounds on every harmonic. Adaptive loudness and DSP protection
-are not included.
+are not included. Version 0.1.1 provides larger slider touch areas and readable
+switch labels on the dark panel. Apply keeps its position while edits are
+unsaved.
 
 The boot-bound three-second backend lease follows the Mod loader's validated
 enabled/quarantine state. A stopped backend, missing Mod, disable or quarantine

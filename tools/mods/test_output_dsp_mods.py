@@ -21,7 +21,7 @@ class OutputDSPMods(unittest.TestCase):
         with tempfile.TemporaryDirectory() as first, tempfile.TemporaryDirectory() as second:
             builder.build(Path(first)); builder.build(Path(second))
             for mid, *_ in builder.MODS:
-                name = mid + '-0.1.0.tar.gz'
+                name = mid + '-' + builder.VERSION + '.tar.gz'
                 raw = (Path(first) / name).read_bytes()
                 self.assertEqual(raw, (Path(second) / name).read_bytes())
                 with tarfile.open(fileobj=io.BytesIO(raw)) as archive:

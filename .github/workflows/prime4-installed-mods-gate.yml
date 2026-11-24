@@ -71,7 +71,7 @@ jobs:
           python3 tools/mods/build_output_dsp_mods.py --out "$task_work/mods"
           python3 tools/mods/build_prime4_led_mod.py --rootfs "$task_work/stock-root" --qrc "$task_work/qrc" --out "$task_work/mods"
           go build -o "$task_work/mod-checker" tools/mods/seed_prime4_gate.go
-          "$task_work/mod-checker" seed "$task_work/gate/data/enginex/ui" "$task_work/mods/output-equalizer-0.1.0.tar.gz" "$task_work/mods/subharmonic-synth-0.1.0.tar.gz" "$task_work/mods/prime4-steady-leds-0.1.0.tar.gz"
+          "$task_work/mod-checker" seed "$task_work/gate/data/enginex/ui" "$task_work/mods/output-equalizer-0.1.1.tar.gz" "$task_work/mods/subharmonic-synth-0.1.1.tar.gz" "$task_work/mods/prime4-steady-leds-0.1.0.tar.gz"
           python3 tools/az01-packer/prime4-installed-mods-gate.py
           bash -n tools/az01-packer/.prime4-installed-mods-gate.sh
           bash -n tools/az01-packer/run-prime4-gate.sh
