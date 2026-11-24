@@ -12,6 +12,9 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
       - name: Download and verify the pinned official PRIME 4 5.3.0 image
         run: |
           set -euo pipefail
@@ -27,7 +30,7 @@ jobs:
           # Pin the Ubuntu archive endpoint instead of the runner's throttled EC2 mirror.
           sudo sed -i 's|mirror+file:/etc/apt/apt-mirrors.txt|https://archive.ubuntu.com/ubuntu|g' /etc/apt/sources.list.d/ubuntu.sources
           sudo apt-get "${apt_args[@]}" update
-          sudo apt-get "${apt_args[@]}" install -y --no-install-recommends gcc-arm-linux-gnueabihf libc6-dev-armhf-cross qemu-user e2fsprogs zstd python3-pil
+          sudo apt-get "${apt_args[@]}" install -y --no-install-recommends gcc-arm-linux-gnueabihf libc6-dev-armhf-cross qemu-user e2fsprogs zstd python3-pil qmlscene qml-module-qtquick2 qml-module-qtquick-window2
       - name: Extract files and QRC with unprivileged QEMU, never a device
         run: |
           set -euo pipefail
@@ -42,7 +45,11 @@ jobs:
           python3 - "$RUNNER_TEMP/prime4-root" "$RUNNER_TEMP/prime4-qrc" <<'PY'
           from pathlib import Path
           import hashlib,json,re,sys
-          names={"playcue.qml","djfxactivate.qml","globalassignmentconfig.qml"}
+          for p in Path(sys.argv[1]).rglob("*Controller_Assignments.qml"):
+              rows=p.read_text(errors="replace").splitlines()
+              value=next((s.strip() for s in rows[:30] if "objectName:" in s),"")
+              print("CONTROLLER_SCOPE="+json.dumps({"path":p.relative_to(Path(sys.argv[1])).as_posix(),"objectName":value}))
+          names={"playcue.qml","djfxactivate.qml","sweepfxselect.qml","deckassignmentconfig.qml","globalassignmentconfig.qml"}
           pattern=re.compile(r"(?i)(play|pause|flash|blink|product|board|objectName|deviceName|globalConfig|led)")
           for root in map(Path,sys.argv[1:]):
               for p in root.rglob("*.qml"):
@@ -56,4 +63,7 @@ jobs:
                       keep.update(range(max(0,i-2),min(len(lines),i+5)))
                   print("LED_MODULE="+json.dumps({"path":p.relative_to(root).as_posix(),"sha256":hashlib.sha256(raw).hexdigest(),"lines":[[i+1,lines[i]] for i in sorted(keep)]}))
           PY
+          python3 -m unittest discover -s tools/mods -p 'test_prime4_led_mod.py'
+          python3 tools/mods/test_prime4_led_fixture.py "$RUNNER_TEMP/prime4-root" "$RUNNER_TEMP/prime4-qrc" "$RUNNER_TEMP/prime4-leds-preview.tar.gz"
+          go run tools/mods/check_prime4_led_loader.go "$RUNNER_TEMP/prime4-leds-preview.tar.gz"
           python3 tools/ui-mod/build_packs.py --qrc "$RUNNER_TEMP/prime4-qrc" --out "$RUNNER_TEMP/prime4-ui-packs"

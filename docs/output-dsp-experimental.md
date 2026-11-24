@@ -10,8 +10,8 @@ are excluded. Adaptive loudness and DSP protection remain out of scope.
 | feature/dsp-core | Off | Off | Inert integration foundation |
 | feature/output-eq | On | Off | Output Equalizer topic |
 | feature/subharmonic-synth | Off | On | Octave synthesizer topic |
-| feature/button-led-behavior | No DSP changes | No DSP changes | Read-only LED evidence; behavior not implemented |
-| test/all-features | On | On | Offline integration checks, including LED evidence tools |
+| feature/button-led-behavior | No DSP changes | No DSP changes | QML-only steady PLAY/DJ-FX Mod, experimental |
+| test/all-features | On | On | Offline integration checks, including LED Mod and fixture checks |
 
 ## Mod Hub split
 
@@ -28,6 +28,8 @@ release validation is complete; installing one on stock EngineX cannot add DSP.
 Settings → Mixer launches the enabled Mod's panel lazily. A panel failure is
 confined to the optional Loader instead of importing Controls into the startup
 UI. No speculative Touch FX shortcut is generated.
+
+A third, independent QML-only prime4-steady-leds Mod controls PLAY and DJ-FX indicators without the DSP core or a firmware edit. Its builder verifies original module hashes and a uniquely JC11 assignment context. See docs/prime4-steady-button-leds.md for validation and restart limits.
 
 All processing defaults off. EQ offers eight bands (90 Hz low shelf;
 180/350/750/1500/3000/8000 Hz bells; 19 kHz high shelf), advanced frequency/Q and
