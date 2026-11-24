@@ -1,5 +1,6 @@
 """End-to-end launcher check on a disposable CI host, never on a deck."""
 import argparse
+import io
 import json
 from pathlib import Path
 import subprocess
@@ -7,6 +8,7 @@ import shutil
 import sys
 import time
 from urllib.request import Request, urlopen
+from PIL import Image, ImageChops, ImageStat
 
 # Only the disposable CI VM receives this non-default settings fixture. It is
 # written by cloud-init, so subsequent boots/source upgrades must retain it.
@@ -43,6 +45,20 @@ def main():
     if args.initial_launcher: first_command[1]=str(args.initial_launcher)
     first_command=[sys.executable,'-c',SEEDED_LAUNCHER,*first_command[1:]]
     process=subprocess.Popen(first_command,stdout=log,stderr=subprocess.STDOUT)
+    splash=Image.open(Path(__file__).parents[2]/'docs/assets/boot-splash-enginex.png').convert('RGB').resize((80,50))
+
+    def ui_ready(raw,checkbox=False):
+        picture=Image.open(io.BytesIO(raw)).convert('RGB')
+        if picture.size!=(1280,800): return False
+        # An initial framebuffer can still be the stock startup splash. Require
+        # visible application content, including the first setup control.
+        difference=ImageStat.Stat(ImageChops.difference(picture.resize((80,50)),splash)).mean
+        if sum(difference)/3<5: return False
+        if sum(min(pixel)>180 for pixel in picture.getdata())<1000: return False
+        if checkbox:
+            x=340 if args.initial_launcher else 100
+            if sum(min(pixel)>180 for pixel in picture.crop((x-16,709,x+16,741)).getdata())<700: return False
+        return True
 
     def request(path,body=None):
         req=Request('http://127.0.0.1:8765'+path,data=json.dumps(body).encode() if body is not None else None,headers={'Content-Type':'application/json'})
@@ -53,14 +69,23 @@ def main():
         for action in ('down','up'):
             request('/api/input',{'kind':'pointer','action':action,'x':x,'y':y,'button':1,'buttons':int(action=='down')})
 
-    def fresh_frame(previous):
+    def fresh_frame(previous,count=2):
         deadline=time.monotonic()+60
         while time.monotonic()<deadline:
             status=json.loads(request('/api/status'))
             if status.get('engine')=='stopped': raise RuntimeError('Engine stopped during UI navigation')
-            if status.get('frame',{}).get('frame',0)>=previous+2: return request('/frame.png')
+            if status.get('frame',{}).get('frame',0)>=previous+count: return request('/frame.png')
             time.sleep(.5)
         raise RuntimeError('the actual Engine UI did not produce fresh navigation frames')
+
+    def browser_capture(chrome):
+        rendered=subprocess.run([chrome,'--headless','--no-sandbox','--disable-gpu',
+            '--disable-background-networking','--disable-dev-shm-usage','--no-first-run',
+            '--window-size=1600,1000','--virtual-time-budget=4000',
+            '--screenshot='+str(args.directory/'browser-frame.png'),
+            '--dump-dom','http://127.0.0.1:8765'],capture_output=True,text=True,timeout=40)
+        if rendered.returncode or '/frame.png?frame=' not in rendered.stdout or 'Lokale Vorschau' not in rendered.stdout:
+            raise RuntimeError('the real browser did not execute the preview frontend and load the Engine image')
 
     try:
         deadline=time.monotonic()+1200
@@ -78,7 +103,7 @@ def main():
                     raise RuntimeError('guest preview setup failed')
                 if status.get('engine')=='stopped':
                     raise RuntimeError('original Engine stopped before producing a framebuffer')
-                if status.get('frame',{}).get('width')==1280:
+                if status.get('frame',{}).get('width')==1280 and ui_ready(request('/frame.png'),checkbox=True):
                     break
             except OSError:
                 pass
@@ -91,13 +116,7 @@ def main():
         chrome=shutil.which('google-chrome') or shutil.which('chromium')
         if not chrome:
             raise RuntimeError('the CI browser check needs the runner-provided Chrome browser')
-        rendered=subprocess.run([chrome,'--headless','--no-sandbox','--disable-gpu',
-            '--disable-background-networking','--disable-dev-shm-usage','--no-first-run',
-            '--window-size=1600,1000','--virtual-time-budget=4000',
-            '--screenshot='+str(args.directory/'browser-frame.png'),
-            '--dump-dom','http://127.0.0.1:8765'],capture_output=True,text=True,timeout=40)
-        if rendered.returncode or '/frame.png?frame=' not in rendered.stdout or 'Lokale Vorschau' not in rendered.stdout:
-            raise RuntimeError('the real browser did not execute the preview frontend and load the Engine image')
+        browser_capture(chrome)
         print('PASS real Chrome browser: frontend JavaScript, local status polling and original Engine image',flush=True)
         report=json.loads(request('/api/feedback',{'note':'isolated VM smoke test'}))
         assert report['uiOnly'] and len(report['sourceCommit'])==40
@@ -111,7 +130,12 @@ def main():
         click(890 if args.initial_launcher else 1130,68)  # Enter the real library/onboarding UI.
         navigated=fresh_frame(frame)
         assert navigated!=before_next, 'the real Wi-Fi Next control did not change the Engine screen'
-        (args.directory/'navigation-frame.png').write_bytes(navigated)
+        frame=json.loads(request('/api/status'))['frame']['frame']
+        click(890 if args.initial_launcher else 1130,68)  # Close Engine DJ Profiles without a login.
+        library=fresh_frame(frame,count=4)
+        assert library!=navigated and ui_ready(library), 'profile setup did not close into the real library/onboarding screen'
+        (args.directory/'navigation-frame.png').write_bytes(library)
+        browser_capture(chrome)
         print('PASS original Engine navigation: dismissed Wi-Fi setup and captured the library/onboarding screen',flush=True)
         # A new plugin instance replaces the UNIX socket and produces fresh frames.
         time.sleep(2)
@@ -123,7 +147,7 @@ def main():
             frame=json.loads(request('/api/status')).get('frame',{})
             if not frame or frame.get('frame',before)<before:
                 saw_reset=True
-            if saw_reset and frame.get('frame',0)>=2:
+            if saw_reset and frame.get('frame',0)>=2 and ui_ready(request('/frame.png')):
                 break
             time.sleep(1)
         else:
@@ -145,7 +169,7 @@ def main():
                     raise RuntimeError('updated preview setup failed')
                 if status.get('engine')=='stopped':
                     raise RuntimeError('updated Engine stopped before producing a framebuffer')
-                if status.get('frame',{}).get('width')==1280 and status['frame'].get('renderer')=='opengl':
+                if status.get('frame',{}).get('width')==1280 and status['frame'].get('renderer')=='opengl' and ui_ready(request('/frame.png')):
                     break
             except OSError:
                 pass
@@ -156,12 +180,7 @@ def main():
         assert restored['dspProfiles']==report['dspProfiles'], 'VM settings changed across reboot/update'
         if args.initial_launcher:
             assert restored['sourceCommit']!=report['sourceCommit'], 'the old source is still running after update'
-            rendered=subprocess.run([chrome,'--headless','--no-sandbox','--disable-gpu',
-                '--disable-background-networking','--disable-dev-shm-usage','--no-first-run',
-                '--window-size=1600,1000','--virtual-time-budget=4000',
-                '--screenshot='+str(args.directory/'browser-frame.png'),
-                '--dump-dom','http://127.0.0.1:8765'],capture_output=True,text=True,timeout=40)
-            assert rendered.returncode==0 and '/frame.png?frame=' in rendered.stdout
+            browser_capture(chrome)
             print('PASS existing VM upgraded from the raster renderer to OpenGL with the same disk and DSP settings',flush=True)
         else:
             assert restored['sourceCommit']==report['sourceCommit']
@@ -173,7 +192,7 @@ def main():
             while time.monotonic()<deadline:
                 try:
                     status=json.loads(request('/api/status'))
-                    if status.get('frame',{}).get('renderer')=='opengl': break
+                    if status.get('frame',{}).get('renderer')=='opengl' and ui_ready(request('/frame.png')): break
                 except OSError: pass
                 time.sleep(2)
             else: raise RuntimeError('upgraded VM did not survive a full shutdown and ordinary start')

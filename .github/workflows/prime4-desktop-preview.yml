@@ -95,7 +95,7 @@ jobs:
       - name: Install VM tools and obtain the previous preview source
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends qemu-system-x86 qemu-utils cloud-image-utils
+          sudo apt-get install -y --no-install-recommends qemu-system-x86 qemu-utils cloud-image-utils python3-pil
           if test -e /dev/kvm; then sudo chmod 666 /dev/kvm; fi
           git fetch --depth=1 origin 153fd5958037fbe488b57a7b9f727f788dc1b374
           git worktree add --detach "$RUNNER_TEMP/previous-preview" FETCH_HEAD
@@ -126,7 +126,7 @@ jobs:
       - name: Install local VM launcher dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends qemu-system-x86 qemu-utils cloud-image-utils
+          sudo apt-get install -y --no-install-recommends qemu-system-x86 qemu-utils cloud-image-utils python3-pil
           if test -e /dev/kvm; then sudo chmod 666 /dev/kvm; fi
       - name: Start the complete local browser VM and test its lifecycle
         timeout-minutes: 24
