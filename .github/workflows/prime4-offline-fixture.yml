@@ -2,7 +2,7 @@ name: PRIME 4 official firmware inspection
 on:
   push:
     branches: [test/all-features]
-    paths: ['.github/workflows/prime4-offline-fixture.yml', 'tools/ui-mod/probe_prime4_fixture.py']
+    paths: ['.github/workflows/prime4-offline-fixture.yml', 'tools/ui-mod/probe_prime4_fixture.py', 'tools/mods/*prime4_led*', 'docs/mods/src/prime4-steady-leds/**']
   workflow_dispatch:
 permissions:
   contents: read
