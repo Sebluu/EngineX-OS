@@ -2,6 +2,7 @@
 #include <QCoreApplication>
 #include <QGuiApplication>
 #include <QGenericPlugin>
+#include <QElapsedTimer>
 #include <QImage>
 #include <QKeyEvent>
 #include <QMouseEvent>
@@ -23,6 +24,7 @@ namespace {
 constexpr const char *directory = "/tmp/preview";
 int input = -1;
 quint64 frame = 0;
+QElapsedTimer clock;
 QPointer<QQuickWindow> selected;
 
 QQuickWindow *window() {
@@ -63,7 +65,9 @@ void dispatch() {
             QMouseEvent event(type, local, local, global, static_cast<Qt::MouseButton>(button),
                               Qt::MouseButtons(static_cast<Qt::MouseButton>(buttons)),
                               Qt::KeyboardModifiers(static_cast<Qt::KeyboardModifier>(modifiers)));
+            event.setTimestamp(static_cast<quint64>(clock.elapsed()) + 1);
             QCoreApplication::sendEvent(target, &event);
+            if (getenv("ENGINEX_PREVIEW_SMOKE")) fprintf(stderr, "PREVIEW_INPUT M %d %.0f %.0f accepted=%d focus=%d\n", action, x, y, event.isAccepted(), target == QGuiApplication::focusWindow());
         } else if (sscanf(packet, "K %d %d %d %u", &action, &key, &modifiers, &character) == 4) {
             if ((action != 1 && action != 3) || key < 0 || key > 0x1ffffff || character > 0x10ffff ||
                 (character >= 0xd800 && character <= 0xdfff) || (modifiers & ~0x1e000000)) continue;
@@ -71,7 +75,9 @@ void dispatch() {
             const QString text = character ? QString::fromUcs4(&point, 1) : QString();
             QKeyEvent event(action == 1 ? QEvent::KeyPress : QEvent::KeyRelease, key,
                             Qt::KeyboardModifiers(static_cast<Qt::KeyboardModifier>(modifiers)), text);
+            event.setTimestamp(static_cast<quint64>(clock.elapsed()) + 1);
             QCoreApplication::sendEvent(target, &event);
+            if (getenv("ENGINEX_PREVIEW_SMOKE")) fprintf(stderr, "PREVIEW_INPUT K %d accepted=%d\n", action, event.isAccepted());
         }
     }
 }
@@ -92,6 +98,7 @@ void capture() {
 }
 
 void start() {
+    clock.start();
     mkdir(directory, 0700);
     input = socket(AF_UNIX, SOCK_DGRAM | SOCK_NONBLOCK | SOCK_CLOEXEC, 0);
     if (input < 0) return;
