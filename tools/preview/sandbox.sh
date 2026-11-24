@@ -51,7 +51,7 @@ mkdir -p "$root/proc/sys/net/core" "$root/proc/sys/net/ipv4" "$root/proc/sys/vm"
 for setting in net/core/rmem_max net/core/wmem_max net/ipv4/tcp_rmem net/ipv4/tcp_wmem vm/swappiness fs/file-max; do
     echo 0 > "$root/proc/sys/$setting"
 done
-run() { chroot "$root" /usr/bin/env -i PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin "$@"; }
+run() { chroot "$root" /usr/bin/env -i HOME=/tmp/home PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin "$@"; }
 run /usr/libexec/enginex-etc-reset > "$work/prepare.log" 2>&1
 run /usr/libexec/enginex-prepare >> "$work/prepare.log" 2>&1
 if [ ! -f "$work/data/enginex/ui/settings.conf" ]; then echo lang=en > "$work/data/enginex/ui/settings.conf"; fi
@@ -84,7 +84,7 @@ fi
 backend=$!
 for attempt in $(seq 120); do
     curl -sf http://127.0.0.1:8080/v1/enginex/ui > /dev/null && break
-    kill -0 "$backend" || { echo 'Preview backend failed' >&2; exit 1; }
+    kill -0 "$backend" || { echo 'Preview backend failed' >&2; tail -30 "$work/backend.log" >&2; exit 1; }
     sleep .5
 done
 run /etc/enginex/engine-ui-guard pre >> "$work/prepare.log" 2>&1
@@ -129,6 +129,7 @@ else
             run /etc/enginex/engine-ui-guard pre >> "$work/prepare.log" 2>&1
             start_engine
         elif [ -n "$engine" ] && ! kill -0 "$engine" 2>/dev/null; then
+            tail -25 "$work/engine.log" >&2
             stop_engine
         fi
         sleep .25
