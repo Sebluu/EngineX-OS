@@ -47,11 +47,18 @@ ApplicationWindow {
     id: root
     width: 1280; height: 800; visible: true
     property string scBoard: "JC11"
+    property int testClicks: 0
+    property alias mainButton: mainButton
+    property alias settingsButton: settingsButton
     property alias panelLoader: odModPanel
     property alias settingsDrawer: settings
     readonly property var overlayParent: root.Overlay.overlay
-    Item { id: uiContainer; anchors.fill: parent }
-    Drawer { id: settings; width: 900; height: root.height; modal: true }
+    Item { id: uiContainer; anchors.fill: parent
+        Button { id: mainButton; x: 100; y: 50; width: 200; height: 100; text: "Main"; onClicked: root.testClicks++ }
+    }
+    Drawer { id: settings; width: 900; height: root.height; modal: true
+        Button { id: settingsButton; x: 100; y: 50; width: 200; height: 100; text: "Settings"; onClicked: root.testClicks++ }
+    }
     function startDSP() { settings.open(); root.odMods=3; root.odOpen("@TEST_SECTION@") }
 }
 '''.replace('@TEST_SECTION@', section)
@@ -76,6 +83,9 @@ TestCase {
         var win=component.createObject(null)
         verify(win !== null,"Settings window creation")
         try {
+            wait(200)
+            mouseClick(win.mainButton)
+            compare(win.testClicks,1,"Inactive DSP loader leaves main UI interactive")
             win.startDSP()
             tryCompare(win.settingsDrawer,"position",1,5000)
             tryCompare(win.panelLoader,"status",Loader.Ready,5000)
@@ -89,6 +99,12 @@ TestCase {
             mouseClick(closeButton)
             tryCompare(win.panelLoader,"active",false,1000)
             verify(win.settingsDrawer.visible,"Settings stays accessible after closing DSP")
+            mouseClick(win.settingsButton)
+            compare(win.testClicks,2,"Settings accepts input after DSP closes")
+            win.settingsDrawer.close()
+            tryCompare(win.settingsDrawer,"position",0,5000)
+            mouseClick(win.mainButton)
+            compare(win.testClicks,3,"Main UI accepts input after Settings closes")
         } finally {
             win.destroy()
         }
