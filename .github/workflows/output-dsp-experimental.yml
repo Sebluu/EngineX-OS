@@ -22,3 +22,17 @@ jobs:
           /tmp/test_od_san
       - name: Python syntax
         run: python3 -m py_compile tools/ui-mod/build_packs.py tools/ui-mod/output_dsp_ui.py
+      - name: Native callback build and runtime guard
+        run: |
+          W=-Wl,--wrap=malloc,--wrap=calloc,--wrap=realloc,--wrap=free,--wrap=pthread_mutex_lock
+          W=$W,--wrap=pthread_cond_wait,--wrap=read,--wrap=write,--wrap=close,--wrap=usleep
+          W=$W,--wrap=nanosleep,--wrap=poll,--wrap=fwrite,--wrap=fputs,--wrap=puts,--wrap=fprintf
+          W=$W,--wrap=vfprintf,--wrap=printf,--wrap=fopen,--wrap=readlink,--wrap=dlsym
+          gcc -std=gnu11 -O2 -U_FORTIFY_SOURCE tools/ui-mod/test_rt_callback.c $W -ldl -lpthread -lm -o /tmp/rt-callback
+          /tmp/rt-callback
+          /tmp/rt-callback selftest
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Web UI backend build and tests
+        run: go test ./pkg/webui

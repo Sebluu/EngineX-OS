@@ -28,7 +28,7 @@ Rectangle {
         x.send(body?JSON.stringify(body):null)
     }
     function change(i,v){
-        if(vals.length!==35)return
+        if(busy||vals.length!==35)return
         var a=vals.slice()
         if(i===4)v=Math.max(v,a[5]+5)
         if(i===5)v=Math.min(v,a[4]-5)
@@ -89,6 +89,7 @@ Rectangle {
                 }
                 ODC.Label {visible:odPanel.section==="eq" && @EQ@;text:"10 Hz – 22 kHz · approximate response";color:"#9ab4c6"}
                 Row {
+                    enabled:!odPanel.busy && odPanel.vals.length===35
                     visible:odPanel.section==="eq" && @EQ@;spacing:5
                     Repeater {
                         model:8
@@ -109,11 +110,12 @@ Rectangle {
                     }
                 }
                 ODC.Label {visible:odPanel.section==="eq" && @EQ@;text:"Highpass · 24 dB/oct · "+(odPanel.vals[1]||0)+" Hz (0 = off)";color:"white"}
-                ODC.Slider {visible:odPanel.section==="eq" && @EQ@;width:parent.width;from:0;to:150;stepSize:5;value:odPanel.vals[1]||0;onMoved:odPanel.change(1,value<10?0:value)}
-                ODC.Switch {visible:odPanel.section==="sub" && @SUB@;text:"SUB · octave-down synthesizer";checked:odPanel.vals[2]===1;onToggled:odPanel.change(2,checked?1:0)}
+                ODC.Slider {enabled:!odPanel.busy && odPanel.vals.length===35;visible:odPanel.section==="eq" && @EQ@;width:parent.width;from:0;to:150;stepSize:5;value:odPanel.vals[1]||0;onMoved:odPanel.change(1,value<10?0:value)}
+                ODC.Switch {enabled:!odPanel.busy && odPanel.vals.length===35;visible:odPanel.section==="sub" && @SUB@;text:"SUB · octave-down synthesizer";checked:odPanel.vals[2]===1;onToggled:odPanel.change(2,checked?1:0)}
                 Repeater {
                     model:[{i:3,t:"Strength %",lo:0,hi:100},{i:4,t:"Maximum sub frequency Hz",lo:30,hi:80},{i:5,t:"Minimum sub frequency Hz",lo:15,hi:55},{i:6,t:"Low band %",lo:0,hi:100},{i:7,t:"High band %",lo:0,hi:100},{i:8,t:"Detection threshold dBFS",lo:-80,hi:-12},{i:9,t:"Attack ms",lo:2,hi:100},{i:10,t:"Release ms",lo:20,hi:500}]
                     ODL.RowLayout {
+                        enabled:!odPanel.busy && odPanel.vals.length===35
                         visible:odPanel.section==="sub" && @SUB@ && (index<2||odPanel.advanced);width:odPanel.width-60
                         ODC.Label {text:modelData.t;color:"white";ODL.Layout.preferredWidth:240}
                         ODC.Slider {ODL.Layout.fillWidth:true;from:modelData.lo;to:modelData.hi;stepSize:1;value:odPanel.vals[modelData.i]||0;onMoved:odPanel.change(modelData.i,value)}

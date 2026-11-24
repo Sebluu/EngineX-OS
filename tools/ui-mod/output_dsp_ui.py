@@ -20,7 +20,9 @@ def add_output_dsp(base,qrc,skin):
     bridge='''
     function odOpen(section) {
         if (Config.device.name !== "JC11") return
+        if (odPanel.busy) return
         odPanel.section=section; odPanel.pair=0; odPanel.advanced=false
+        odPanel.vals=[]; odPanel.profiles=[]; odPanel.dirty=false; odPanel.message="Loading..."
         odPanel.visible=true; odPanel.request(null)
     }
     property bool odSubEnabled: false

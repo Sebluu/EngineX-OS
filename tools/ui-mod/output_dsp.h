@@ -4,6 +4,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
+#include <sys/stat.h>
 #include "output_dsp_features.h"
 
 enum { OD_PAIRS=4, OD_FILTERS=10 };
@@ -19,6 +20,7 @@ _Static_assert(sizeof(struct od_params)==OD_VALUES*sizeof(float),"config layout"
 struct od_cfg {
     unsigned rate, eq, sub;
     float wet, level[2], threshold, attack, release;
+    unsigned min_period[2], max_period[2];
     struct od_bq filters[OD_FILTERS], source[2][2], hp[2], lp[2];
 };
 struct od_state {
@@ -60,8 +62,10 @@ static struct od_bq od_filter(int type,double hz,double q,double db,unsigned rat
 static void od_prepare(struct od_cfg *c,const struct od_params *p,unsigned rate) {
     memset(c,0,sizeof *c); c->rate=rate;
     if(rate<32000||rate>192000)return;
-    c->eq=OD_FEATURE_EQ && p->eq_on!=0;
-    c->sub=OD_FEATURE_SUB && p->sub_on!=0 && p->wet>0;
+    int eq_changed=p->hp>=10;
+    for(int i=0;i<8;i++)if(p->bands[i][2]!=0)eq_changed=1;
+    c->eq=OD_FEATURE_EQ && p->eq_on!=0 && eq_changed;
+    c->sub=OD_FEATURE_SUB && p->sub_on!=0 && p->wet>0 && (p->low>0 || p->high>0);
     c->wet=p->wet*.01f;c->level[0]=p->low*.01f;c->level[1]=p->high*.01f;
     c->threshold=pow(10,p->threshold/20);
     c->attack=1-exp(-1/(rate*p->attack*.001));c->release=1-exp(-1/(rate*p->release*.001));
@@ -73,6 +77,8 @@ static void od_prepare(struct od_cfg *c,const struct od_params *p,unsigned rate)
     if(c->sub)for(int j=0;j<2;j++){
         double lo=fmax(j?72:48,p->minhz*2),hi=fmin(j?160:72,p->maxhz*2);
         if(hi<=lo){c->level[j]=0;continue;}
+        c->min_period[j]=(unsigned)(rate/hi);
+        c->max_period[j]=(unsigned)(rate/lo)+1;
         c->source[j][0]=od_filter(3,lo,.707,0,rate);c->source[j][1]=od_filter(4,hi,.707,0,rate);
         c->hp[j]=od_filter(3,p->minhz,.707,0,rate);c->lp[j]=od_filter(4,p->maxhz,.707,0,rate);
     }
@@ -109,11 +115,11 @@ static inline void od_sample(struct od_state *s,float *l,float *r) {
             if(s->age[j]<c->rate)s->age[j]++;
             if(v>=0&&s->previous[j]<0){
                 unsigned n=s->age[j];s->age[j]=0;
-                if(n>=c->rate/180&&n<=c->rate/40&&s->envelope[j]>c->threshold)s->sign[j]=s->sign[j]>0?-1:1;
+                if(n>=c->min_period[j]&&n<=c->max_period[j]&&s->envelope[j]>c->threshold)s->sign[j]=s->sign[j]>0?-1:1;
                 else s->sign[j]=0;
             }
             s->previous[j]=v;
-            if(s->age[j]>c->rate/35||s->envelope[j]<c->threshold)s->sign[j]=0;
+            if(s->age[j]>c->max_period[j]+1||s->envelope[j]<c->threshold)s->sign[j]=0;
             float raw=s->sign[j]*s->envelope[j];
             sub+=od_tick(&c->lp[j],&s->lp[j],od_tick(&c->hp[j],&s->hp[j],raw))*c->level[j];
         }
@@ -158,10 +164,16 @@ static int od_valid(const struct od_params *p){
 }
 /* Called only by the existing 80 ms settings worker. Invalid/missing file disables DSP. */
 static void od_poll(const char *path,unsigned rate) {
-    static unsigned previous_rate;static int have;
+    static unsigned previous_rate;static int have, had_stat;
+    static struct stat old_stat;
     static struct od_params previous[OD_PAIRS];
+    struct stat st;
+    int exists=stat(path,&st)==0;
+    if(have&&previous_rate==rate&&exists==had_stat&&
+       (!exists||(old_stat.st_dev==st.st_dev&&old_stat.st_ino==st.st_ino&&old_stat.st_size==st.st_size&&
+        old_stat.st_mtime==st.st_mtime&&old_stat.st_ctime==st.st_ctime)))return;
     struct od_params next[OD_PAIRS]={{0}};
-    FILE*f=fopen(path,"r");int good=f!=NULL;
+    FILE*f=exists?fopen(path,"r"):NULL;int good=f!=NULL;
     if(f){
         for(int p=0;p<OD_PAIRS&&good;p++){
             float row[OD_VALUES];for(unsigned j=0;j<OD_VALUES;j++)if(fscanf(f,"%f",&row[j])!=1){good=0;break;}
@@ -171,6 +183,8 @@ static void od_poll(const char *path,unsigned rate) {
         fclose(f);
     }
     if(!good){memset(next,0,sizeof next);for(int p=0;p<OD_PAIRS;p++){next[p].attack=12;next[p].release=100;}}
+    had_stat=exists;
+    if(exists)old_stat=st;
     if(have&&previous_rate==rate&&!memcmp(next,previous,sizeof next))return;
     memcpy(previous,next,sizeof next);have=1;previous_rate=rate;
     for(int p=0;p<OD_PAIRS;p++){struct od_cfg c;od_prepare(&c,&next[p],rate);od_publish(p,&c);}
