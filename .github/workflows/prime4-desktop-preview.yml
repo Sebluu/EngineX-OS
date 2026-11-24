@@ -1,4 +1,4 @@
-name: PRIME 4 desktop preview inspection
+name: PRIME 4 desktop preview
 on:
   push:
     branches: [feature/desktop-preview]
@@ -6,37 +6,60 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
+concurrency:
+  group: desktop-preview-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
-  inspect:
+  native-ui:
     runs-on: ubuntu-24.04
-    timeout-minutes: 12
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
-      - name: Fetch pinned official image into disposable storage
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Obtain pinned baseline in disposable storage
         run: |
           set -euo pipefail
-          curl --fail --location --retry 2 --max-time 180 'https://public.inmusiccdn.com/Engine/5.3.0/RELEASE/d41cd81e67f225bf/PRIME4-5.3.0-Update.img' -o "$RUNNER_TEMP/prime4.img"
-          echo "8e49313be0ef338d5452631c5772ee5b1d72e076cae65bf69a6df8b5b210029f  $RUNNER_TEMP/prime4.img" | sha256sum -c -
-      - name: Inspect bundled display plugins
+          mkdir "$RUNNER_TEMP/desktop-preview"
+          curl --fail --location --retry 2 --max-time 180 'https://github.com/Cd1s/EngineX-OS/releases/download/v5.3.0.5-r1/PRIME4-5.3.0.5-EngineX-OS-Denon-PRIME-4-JC11-Update.img' -o "$RUNNER_TEMP/desktop-preview/baseline.img"
+          echo "a76b3eaefdb24dab01ec70f2316c0809a6b25d281fa6c03d751437463a1f25e6  $RUNNER_TEMP/desktop-preview/baseline.img" | sha256sum -c -
+      - name: Install cross compiler and fetch Qt 6 public headers
+        timeout-minutes: 8
         run: |
           set -euo pipefail
+          sudo sed -i 's|mirror+file:/etc/apt/apt-mirrors.txt|https://archive.ubuntu.com/ubuntu|g' /etc/apt/sources.list.d/ubuntu.sources
+          sudo sed -i '/^Types: deb/a Architectures: amd64' /etc/apt/sources.list.d/ubuntu.sources
+          sudo dpkg --add-architecture armhf
+          printf '%s\n' 'Types: deb' 'URIs: https://ports.ubuntu.com/ubuntu-ports' 'Suites: noble noble-updates noble-security' 'Components: main universe' 'Architectures: armhf' 'Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg' | sudo tee /etc/apt/sources.list.d/preview-armhf.sources > /dev/null
           sudo apt-get -o Acquire::Retries=1 -o Acquire::http::Timeout=20 update
-          sudo apt-get install -y --no-install-recommends e2fsprogs zstd binutils
-          python3 -I tools/az01-packer/az01_packer.py unpack "$RUNNER_TEMP/prime4.img" --output "$RUNNER_TEMP/prime4-parts"
-          mkdir "$RUNNER_TEMP/prime4-root"
-          debugfs -R "rdump / $RUNNER_TEMP/prime4-root" "$RUNNER_TEMP/prime4-parts/rootfs.ext2" 2>"$RUNNER_TEMP/debugfs.log"
-          python3 - "$RUNNER_TEMP/prime4-root" <<'PY'
-          from pathlib import Path
-          import sys
-          root=Path(sys.argv[1])
-          for folder in ("platforms","platforminputcontexts","xcbglintegrations"):
-              for p in sorted(root.rglob(folder)):
-                  if p.is_dir():
-                      print("QT_PLUGIN_DIRECTORY",p.relative_to(root))
-                      for entry in sorted(p.iterdir()):
-                          print("QT_PLUGIN",entry.relative_to(root))
-          for p in sorted(root.rglob("libQt5Core.so*")):
-              print("QT_CORE",p.relative_to(root))
-          PY
-          readelf --dyn-syms --wide "$RUNNER_TEMP/prime4-root/usr/Engine/Engine" | c++filt | python3 -c 'import sys; words=("qVersion","QCoreApplication::postEvent","QCoreApplication::sendEvent","QMetaObject::invokeMethodImpl","QGuiApplication::allWindows","QGuiApplication::topLevelWindows","QMouseEvent::QMouseEvent","QKeyEvent::QKeyEvent","QQuickWindow::grabWindow","QTimer::singleShot","QTimer::start","QImage::save"); rows=[s.strip() for s in sys.stdin if any(w in s for w in words)]; print("\\n".join(rows[:55]))'
-          strings "$RUNNER_TEMP/prime4-root/usr/Engine/Engine" | python3 -c 'import re,sys; rows=[s.strip() for s in sys.stdin if re.fullmatch(r"5\\.(12|15)\\.\\d+\\s*",s)]; print("QT_VERSION_LITERALS="+str(sorted(set(rows))))'
+          sudo apt-get install -y --no-install-recommends g++-arm-linux-gnueabihf libc6-dev-armhf-cross qemu-user-static binfmt-support e2fsprogs zstd python3-pil iproute2
+          mkdir "$RUNNER_TEMP/desktop-preview/qt-sdk"
+          cd "$RUNNER_TEMP/desktop-preview/qt-sdk"
+          apt-get download qt6-base-dev:armhf qt6-declarative-dev:armhf
+          for archive in *.deb; do dpkg-deb -x "$archive" .; done
+          sudo update-binfmts --enable qemu-arm
+          grep -q '^flags:.*F' /proc/sys/fs/binfmt_misc/qemu-arm
+      - name: Compile preview-only public Qt bridge
+        run: |
+          set -euo pipefail
+          sdk="$RUNNER_TEMP/desktop-preview/qt-sdk/usr/include/arm-linux-gnueabihf/qt6"
+          arm-linux-gnueabihf-g++ -std=c++17 -O2 -Wall -Wextra -Werror -shared -fPIC -pthread -I"$sdk" -I"$sdk/QtCore" -I"$sdk/QtGui" -I"$sdk/QtQuick" -I"$sdk/QtQml" -o "$RUNNER_TEMP/desktop-preview/bridge.so" tools/preview/bridge.cpp
+          bash -n tools/preview/sandbox.sh
+          python3 -m py_compile tools/preview/test_live_bridge.py
+      - name: Extract and run actual ARM Engine with synthetic input target
+        timeout-minutes: 8
+        run: |
+          set -euo pipefail
+          task_work="$RUNNER_TEMP/desktop-preview"
+          python3 -I tools/az01-packer/az01_packer.py unpack "$task_work/baseline.img" --output "$task_work/parts"
+          mkdir "$task_work/root"
+          debugfs -R "rdump / $task_work/root" "$task_work/parts/rootfs.ext2" 2>"$task_work/debugfs.log"
+          sudo env "PATH=$PATH" "GITHUB_ACTIONS=true" bash tools/preview/sandbox.sh "$task_work" smoke
+      - name: Bounded diagnostic evidence
+        if: always()
+        run: |
+          task_work="$RUNNER_TEMP/desktop-preview"
+          if test -f "$task_work/engine.log"; then grep -aE 'PREVIEW_|symbol lookup|error while|Cannot load|Could not|ASSERT|Segmentation|Aborted' "$task_work/engine.log" | tail -30 || true; fi
+          if test -f "$task_work/runtime/frame.json"; then cat "$task_work/runtime/frame.json"; fi
+          # No firmware, vendor files, runtime credentials or compiled binary is uploaded.
