@@ -99,7 +99,15 @@ def next_frames():
         time.sleep(.1)
     raise SystemExit('Mod controls did not produce fresh frames')
 pointer(1,sx,sy);pointer(2,ex,ey);pointer(3,ex,ey)
-next_frames()
+# The dirty Close button widens to 'Discard / close', moving Apply. Obtain its
+# settled position after the drag instead of clicking stale Ready coordinates.
+deadline=time.monotonic()+20
+while time.monotonic()<deadline:
+    save_control=re.search(r'PREVIEW_SUB_SAVE_CONTROL ([0-9.]+) ([0-9.]+)',log.read_text(errors='replace'))
+    if save_control:
+        ax,ay=map(float,save_control.groups());break
+    time.sleep(.1)
+else:raise SystemExit('the actual SUB slider did not enable Apply at a settled position')
 pointer(1,ax,ay);pointer(3,ax,ay)
 deadline=time.monotonic()+15
 while time.monotonic()<deadline:

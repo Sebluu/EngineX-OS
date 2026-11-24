@@ -1,4 +1,4 @@
-"""Create/restore the old SUB row geometry in a disposable CI-only fixture."""
+"""Create/restore the old small SUB slider hit areas in a disposable CI-only fixture."""
 import gzip
 import io
 import os

@@ -75,11 +75,11 @@ jobs:
           GITHUB_ACTIONS=true bash tools/preview/build.sh "$task_work"
           GITHUB_ACTIONS=true python3 tools/preview/test_panel_regression.py stage "$task_work"
           if sudo env "PATH=$PATH" "GITHUB_ACTIONS=true" bash tools/preview/sandbox.sh "$task_work" smoke > "$task_work/old-panel-check.log" 2>&1; then
-            echo 'The control geometry regression accepted the old zero-height SUB rows' >&2
+            echo 'The control geometry regression accepted the old small SUB slider hit areas' >&2
             exit 1
           fi
           grep -q 'could not open the sub Mod settings panel' "$task_work/old-panel-check.log" || { tail -30 "$task_work/old-panel-check.log"; exit 1; }
-          echo 'PASS original Engine regression rejects the old SUB row geometry'
+          echo 'PASS original Engine regression rejects the old small SUB slider hit areas'
           sudo env "GITHUB_ACTIONS=true" python3 tools/preview/test_panel_regression.py restore "$task_work"
           sudo env "PATH=$PATH" "GITHUB_ACTIONS=true" bash tools/preview/sandbox.sh "$task_work" smoke
           sudo env "PATH=$PATH" "GITHUB_ACTIONS=true" bash tools/preview/sandbox.sh "$task_work" smoke

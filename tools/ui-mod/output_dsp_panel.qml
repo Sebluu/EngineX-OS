@@ -157,10 +157,10 @@ Item {
                     ODL.RowLayout {
                         enabled:!odPanel.busy && odPanel.vals.length===35
                         visible:odPanel.section==="sub" && @SUB@ && (index<2||odPanel.advanced);width:odPanel.width-60
-                        // Column is a positioner, so give each nested layout a height.
+                        // Keep the slider hit area large enough for direct touch.
                         height:40
                         ODC.Label {text:modelData.t;color:"white";ODL.Layout.preferredWidth:240}
-                        ODC.Slider {objectName:"outputDSPSubSlider"+index;ODL.Layout.fillWidth:true;from:modelData.lo;to:modelData.hi;stepSize:1;value:odPanel.vals[modelData.i]||0;onMoved:odPanel.change(modelData.i,value)}
+                        ODC.Slider {objectName:"outputDSPSubSlider"+index;ODL.Layout.fillWidth:true;ODL.Layout.fillHeight:true;from:modelData.lo;to:modelData.hi;stepSize:1;value:odPanel.vals[modelData.i]||0;onMoved:odPanel.change(modelData.i,value)}
                         ODC.Label {text:(odPanel.vals[modelData.i]||0).toFixed(0);color:"white"}
                     }
                 }

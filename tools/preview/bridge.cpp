@@ -6,6 +6,7 @@
 #include <QKeyEvent>
 #include <QMouseEvent>
 #include <QPointer>
+#include <QSet>
 #include <QQuickWindow>
 #include <QQuickView>
 #include <QQuickItem>
@@ -45,7 +46,11 @@ bool touching = false;
 QPointer<QQuickWindow> selected;
 QString expectedPanel;
 bool panelReported = false;
+bool saveReported = false;
 bool panelDiagnosed = false;
+QString panelGeometry;
+int stablePanelTicks = 0;
+qint64 nextPanelDiagnostic = 0;
 
 // The firmware uses custom scene-graph geometry. Qt's raster backend silently
 // omits those nodes. CI must exercise one, in the real Engine scene, to catch it.
@@ -175,7 +180,7 @@ void dispatch() {
             for (QObject *object : uiObjects(target)) {
                 if (object->metaObject()->indexOfMethod("odOpen(QVariant)") < 0) continue;
                 fprintf(stderr, "PREVIEW_MOD_HOST board=%s mods=%d\n", qPrintable(object->property("scBoard").toString()), object->property("odMods").toInt());
-                expectedPanel = section; panelReported = false; panelDiagnosed = false;
+                expectedPanel = section; panelReported = false; saveReported = false; panelDiagnosed = false; panelGeometry.clear(); stablePanelTicks = 0; nextPanelDiagnostic = 0;
                 QMetaObject::invokeMethod(object, "odOpen", Qt::DirectConnection, Q_ARG(QVariant, QVariant(section)));
                 break;
             }
@@ -203,30 +208,43 @@ void requestFrame() {
     // Capture is performed at EGL swap, after the real render pass. Asking for
     // an update also publishes the final state of an otherwise idle screen.
     if (target) target->update();
-    if (target && !expectedPanel.isEmpty() && !panelReported) {
+    if (target && !expectedPanel.isEmpty()) {
         for (QObject *popup : uiObjects(target)) {
             if (popup->objectName() != QStringLiteral("outputDSPDialog")) continue;
             auto *content = popup->property("contentItem").value<QQuickItem *>();
             if (!popup->property("visible").toBool() || !content || content->property("section").toString() != expectedPanel) continue;
-            if (content->property("message").toString() == QStringLiteral("Ready")) {
-                bool first = false, second = false;
+            const QString message = content->property("message").toString();
+            if (message == QStringLiteral("Ready") || message == QStringLiteral("Unsaved changes")) {
+                bool first = false, second = false, brightSwitchLabel = false;
+                QPointF firstPosition, secondPosition;
+                QSet<QString> profiles;
+                int subSliders = 0;
                 QList<QQuickItem *> items{content};
                 for (qsizetype i = 0; i < items.size(); ++i) items.append(items[i]->childItems());
-                QQuickItem *slider = nullptr, *apply = nullptr;
+                QQuickItem *slider = nullptr, *apply = nullptr, *strength = nullptr;
                 for (QQuickItem *item : items) {
                     const QString text = item->property("text").toString();
                     const QString kind = QString::fromLatin1(item->metaObject()->className());
                     const QPointF scene = item->mapToScene(QPointF());
-                    const bool sized = item->isVisible() && item->width() > 1 && item->height() > 1 &&
+                    bool sized = item->isVisible() && item->width() > 1 && item->height() > 1 &&
                         scene.x() >= 0 && scene.y() >= 0 && scene.x() + item->width() <= target->width() && scene.y() + item->height() <= target->height();
-                    if (sized && item->objectName() == QStringLiteral("outputDSPSubSlider0")) slider = item;
+                    const QRectF bounds = item->mapRectToScene(item->boundingRect());
+                    for (QQuickItem *parent = item->parentItem(); parent && sized; parent = parent->parentItem())
+                        if (parent->clip() && !parent->mapRectToScene(parent->boundingRect()).adjusted(-.1, -.1, .1, .1).contains(bounds)) sized = false;
+                    if (item->objectName().startsWith(QStringLiteral("outputDSPSubSlider"))) ++subSliders;
+                    if (item->objectName() == QStringLiteral("outputDSPSubSlider0")) strength = item;
+                    if (item->property("checkable").toBool() && (text == QStringLiteral("Main") || text == QStringLiteral("Booth") ||
+                        text == QStringLiteral("Phones") || text == QStringLiteral("Zone"))) profiles.insert(text);
+                    const QColor color = item->property("color").value<QColor>();
+                    if (text == QStringLiteral("Advanced") && color.isValid() && color.lightnessF() > .5) brightSwitchLabel = true;
+                    if (sized && item->height() >= 36 && item->objectName() == QStringLiteral("outputDSPSubSlider0")) slider = item;
                     if (sized && item->objectName() == QStringLiteral("outputDSPApply")) apply = item;
                     if (expectedPanel == QStringLiteral("sub")) {
-                        if (text == QStringLiteral("Strength %")) first = sized;
-                        if (text == QStringLiteral("Maximum sub frequency Hz")) second = sized;
+                        if (text == QStringLiteral("Strength %") && sized) { first = true; firstPosition = scene; }
+                        if (text == QStringLiteral("Maximum sub frequency Hz") && sized) { second = true; secondPosition = scene; }
                     } else {
-                        if (text == QStringLiteral("3000 Hz")) first = sized;
-                        if (text.startsWith(QStringLiteral("Highpass"))) second = sized;
+                        if (text == QStringLiteral("3000 Hz") && sized) { first = true; firstPosition = scene; }
+                        if (text.startsWith(QStringLiteral("Highpass")) && sized) { second = true; secondPosition = scene; }
                     }
                     if (!panelDiagnosed && (text.contains(QStringLiteral("Strength")) || text.contains(QStringLiteral("Maximum")) ||
                         kind.contains(QStringLiteral("Layout")) || kind.contains(QStringLiteral("Repeater")))) {
@@ -237,7 +255,36 @@ void requestFrame() {
                     }
                 }
                 panelDiagnosed = true;
-                if (first && second && (expectedPanel != QStringLiteral("sub") || (slider && apply))) {
+                if (!panelReported && clock.elapsed() >= nextPanelDiagnostic) {
+                    fprintf(stderr, "PREVIEW_MOD_WAIT section=%s first=%d second=%d bright=%d profiles=%d sliders=%d targetHeight=%.1f\n",
+                        qPrintable(expectedPanel), first, second, brightSwitchLabel, static_cast<int>(profiles.size()), subSliders, strength ? strength->height() : 0);
+                    nextPanelDiagnostic = clock.elapsed() + 5000;
+                }
+                if (first && second && brightSwitchLabel && profiles.size() == 4 && subSliders == 8 &&
+                    (expectedPanel != QStringLiteral("sub") || (slider && apply))) {
+                    // Repeaters incubate delegates after the root reports Ready.
+                    // Wait for the complete panel and stable visual coordinates.
+                    QString geometry = QString::number(qRound(firstPosition.x())) + QLatin1Char(',') + QString::number(qRound(firstPosition.y())) +
+                        QLatin1Char(',') + QString::number(qRound(secondPosition.x())) + QLatin1Char(',') + QString::number(qRound(secondPosition.y()));
+                    if (slider) {
+                        const QPointF point = slider->mapToScene(QPointF());
+                        geometry += QLatin1Char(',') + QString::number(qRound(point.y())) + QLatin1Char(',') + QString::number(qRound(slider->width()));
+                    }
+                    if (apply) {
+                        const QPointF point = apply->mapToScene(QPointF());
+                        geometry += QLatin1Char(',') + QString::number(qRound(point.x())) + QLatin1Char(',') + QString::number(qRound(point.y()));
+                    }
+                    stablePanelTicks = geometry == panelGeometry ? stablePanelTicks + 1 : 0;
+                    panelGeometry = geometry;
+                    if (stablePanelTicks < 2) continue;
+                    if (panelReported) {
+                        if (!saveReported && expectedPanel == QStringLiteral("sub") && apply && apply->isEnabled() && content->property("dirty").toBool()) {
+                            const QPointF save = apply->mapToScene(QPointF(apply->width() * .5, apply->height() * .5));
+                            fprintf(stderr, "PREVIEW_SUB_SAVE_CONTROL %.2f %.2f\n", save.x(), save.y());
+                            saveReported = true;
+                        }
+                        break;
+                    }
                     if (expectedPanel == QStringLiteral("sub") && slider && apply) {
                         const QPointF start = slider->mapToScene(QPointF(slider->width() * .3, slider->height() * .5));
                         const QPointF end = slider->mapToScene(QPointF(slider->width() * .8, slider->height() * .5));
@@ -247,6 +294,8 @@ void requestFrame() {
                     fprintf(stderr, "PREVIEW_MOD_PANEL_READY section=%s\n", qPrintable(expectedPanel));
                     panelReported = true;
                     break;
+                } else {
+                    panelGeometry.clear(); stablePanelTicks = 0;
                 }
             }
         }
