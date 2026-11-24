@@ -2,10 +2,21 @@ import QtQuick 2.12
 import QtQuick.Controls 2.5 as ODC
 import QtQuick.Layouts 1.12 as ODL
 
-Rectangle {
+Item {
+    id: odHost
+    signal closed()
+    ODC.Popup {
+        id: odDialog
+        objectName: "outputDSPDialog"
+        parent: ODC.Overlay.overlay
+        visible: odHost.visible; modal: true; focus: true; padding: 0; z: 100000
+        closePolicy: ODC.Popup.NoAutoClose
+        anchors.centerIn: parent
+        width: Math.min(parent.width-32,920); height: Math.min(parent.height-32,580)
+        onClosed: odHost.closed()
+        contentItem: Rectangle {
     id: odPanel
-    visible: true; z: 100000; anchors.centerIn: parent
-    width: Math.min(parent.width-32,920); height: Math.min(parent.height-32,580)
+    onClosed: odDialog.close()
     color: "#131b24"; radius: 8
     property string section: "@SECTION@"
     signal closed()
@@ -75,7 +86,7 @@ Rectangle {
             Item {ODL.Layout.fillWidth:true}
             ODC.Switch {text:"Advanced";checked:odPanel.advanced;onToggled:odPanel.advanced=checked}
             ODC.Button {text:"Apply";enabled:!odPanel.busy&&odPanel.vals.length===35&&odPanel.dirty;onClicked:odPanel.request({section:odPanel.section,pair:odPanel.pair,values:odPanel.vals})}
-            ODC.Button {text:odPanel.dirty?"Discard / close":"Close";onClicked:odPanel.closed()}
+            ODC.Button {objectName:"outputDSPClose";text:odPanel.dirty?"Discard / close":"Close";onClicked:odPanel.closed()}
         }
         ODL.RowLayout {
             Repeater {
@@ -155,3 +166,5 @@ Rectangle {
     }
 }
 
+    }
+}
