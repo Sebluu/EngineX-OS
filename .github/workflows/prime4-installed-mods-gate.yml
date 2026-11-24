@@ -1,0 +1,92 @@
+name: PRIME 4 isolated installed-Mod reboot gate
+on:
+  push:
+    branches: [test/all-features]
+    paths: ['.github/workflows/prime4-installed-mods-gate.yml', 'tools/az01-packer/prime4-installed-mods-gate.py', 'tools/mods/seed_prime4_gate.go']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  rootfs:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 55
+    env:
+      OLD_NAME: PRIME4-5.3.0.5-EngineX-OS-Denon-PRIME-4-JC11-Update.img
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Download hash-pinned stock and published baseline to the temporary runner
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/jc11-gate/old" "$RUNNER_TEMP/jc11-gate/candidate"
+          curl --fail --location --retry 2 --max-time 180 'https://public.inmusiccdn.com/Engine/5.3.0/RELEASE/d41cd81e67f225bf/PRIME4-5.3.0-Update.img' -o "$RUNNER_TEMP/jc11-gate/stock.img"
+          echo "8e49313be0ef338d5452631c5772ee5b1d72e076cae65bf69a6df8b5b210029f  $RUNNER_TEMP/jc11-gate/stock.img" | sha256sum -c -
+          curl --fail --location --retry 2 --max-time 180 "https://github.com/Cd1s/EngineX-OS/releases/download/v5.3.0.5-r1/$OLD_NAME" -o "$RUNNER_TEMP/jc11-gate/old/$OLD_NAME"
+          echo "a76b3eaefdb24dab01ec70f2316c0809a6b25d281fa6c03d751437463a1f25e6  $RUNNER_TEMP/jc11-gate/old/$OLD_NAME" | sha256sum -c -
+      - name: Install isolated build and emulation dependencies
+        timeout-minutes: 10
+        run: |
+          set -euo pipefail
+          apt_args=(-o Acquire::ForceIPv4=true -o Acquire::Retries=1 -o Acquire::http::Timeout=20 -o Acquire::https::Timeout=20)
+          if test -f /etc/apt/sources.list.d/ubuntu.sources; then
+            apt_args+=(-o Dir::Etc::sourcelist=sources.list.d/ubuntu.sources -o Dir::Etc::sourceparts=-)
+          fi
+          sudo sed -i 's|mirror+file:/etc/apt/apt-mirrors.txt|https://archive.ubuntu.com/ubuntu|g' /etc/apt/sources.list.d/ubuntu.sources
+          sudo apt-get "${apt_args[@]}" update
+          sudo apt-get "${apt_args[@]}" install -y --no-install-recommends gcc-arm-linux-gnueabihf libc6-dev-armhf-cross qemu-user qemu-user-static binfmt-support e2fsprogs zstd python3-pil kmod iproute2
+          sudo update-binfmts --enable qemu-arm
+          grep -q '^flags:.*F' /proc/sys/fs/binfmt_misc/qemu-arm
+      - name: Compile the exact branch and matching QRC packs, never publish a firmware asset
+        run: |
+          set -euo pipefail
+          task_work="$RUNNER_TEMP/jc11-gate"
+          python3 -I tools/az01-packer/az01_packer.py unpack "$task_work/stock.img" --output "$task_work/stock-parts"
+          mkdir "$task_work/stock-root"
+          debugfs -R "rdump / $task_work/stock-root" "$task_work/stock-parts/rootfs.ext2" 2>"$task_work/debugfs.log"
+          arm-linux-gnueabihf-gcc -O2 -shared -fPIC tools/ui-mod/qrc_dump.c -ldl -o "$task_work/qrc-dump.so"
+          python3 -I tools/ui-mod/extract_qrc.py --tree "$task_work/stock-root" --preload "$task_work/qrc-dump.so" --out "$task_work/qrc"
+          python3 tools/ui-mod/build_packs.py --release --qrc "$task_work/qrc" --out "$task_work/packs"
+          GOOS=linux GOARCH=arm GOARM=7 CGO_ENABLED=0 go build -trimpath -ldflags="-s -w -X github.com/Cd1s/EngineX-OS/pkg/webui.ReleaseBuild=1" -o "$task_work/enginex-suite" ./cmd/enginex-suite
+          OUT="$task_work/libengine-ui-hook.so" sh tools/ui-mod/build.sh
+          cp -a rootfs-overlay "$task_work/overlay"
+          rm -f "$task_work/overlay/README.md"
+          mkdir -p "$task_work/overlay/usr/share/enginex" "$task_work/overlay/usr/local/lib/enginex"
+          printf '%s\n' 'v5.3.0.5-r1' > "$task_work/overlay/etc/enginex/release-tag"
+          xz -T0 --check=crc32 --lzma2=preset=9e,dict=8MiB,lc=0,lp=2,pb=2 -c "$task_work/enginex-suite" > "$task_work/overlay/usr/share/enginex/enginex-suite.xz"
+          gzip -dc "$task_work/packs.tar.gz" | xz -T0 --check=crc32 --lzma2=preset=9e,dict=8MiB -c > "$task_work/overlay/usr/share/enginex/ui-packs.tar.xz"
+          install -m0755 "$task_work/libengine-ui-hook.so" "$task_work/overlay/etc/enginex/libengine-ui-hook.so"
+          install -m0755 "$task_work/libengine-ui-hook.so" "$task_work/overlay/usr/local/lib/enginex/libengine-ui-hook.so"
+          # Preserve the hash-pinned baseline's kernel, vendor files, fsck helpers and LoadPin modules.
+          python3 -I tools/az01-packer/az01_packer.py patch-rootfs "$task_work/old/$OLD_NAME" --overlay "$task_work/overlay" --set-version 5.3.0.5 --grow --output "$task_work/candidate.ext2"
+          python3 -I tools/az01-packer/az01_packer.py repack "$task_work/old/$OLD_NAME" --rootfs "$task_work/candidate.ext2" --grow --output "$task_work/candidate/$OLD_NAME"
+      - name: Seed genuine Mod-loader state in disposable data and add assertions
+        run: |
+          set -euo pipefail
+          task_work="$RUNNER_TEMP/jc11-gate"
+          python3 tools/mods/build_output_dsp_mods.py --out "$task_work/mods"
+          python3 tools/mods/build_prime4_led_mod.py --rootfs "$task_work/stock-root" --qrc "$task_work/qrc" --out "$task_work/mods"
+          go build -o "$task_work/mod-checker" tools/mods/seed_prime4_gate.go
+          "$task_work/mod-checker" seed "$task_work/gate/data/enginex/ui" "$task_work/mods/output-equalizer-0.1.0.tar.gz" "$task_work/mods/subharmonic-synth-0.1.0.tar.gz" "$task_work/mods/prime4-steady-leds-0.1.0.tar.gz"
+          python3 tools/az01-packer/prime4-installed-mods-gate.py
+          bash -n tools/az01-packer/.prime4-installed-mods-gate.sh
+      - name: Real rootfs upgrade, populated library, abrupt process cut and second boot
+        run: |
+          set -euo pipefail
+          task_work="$RUNNER_TEMP/jc11-gate"
+          # Root privileges are confined to this disposable runner. The gate drops SYS_TIME
+          # and creates private mount/PID/network namespaces; dangerous deck commands are shimmed.
+          sudo env "PATH=$PATH" "GITHUB_ACTIONS=true" "RUNNER_TEMP=$RUNNER_TEMP" "GOCACHE=$task_work/go-cache" "GATE_MODS_CHECKER=$task_work/mod-checker" GATE_RELEASE_TAG=v5.3.0.5-r1 GATE_ENGINE_START=300 bash tools/az01-packer/.prime4-installed-mods-gate.sh "$task_work/old/$OLD_NAME" "$task_work/candidate/$OLD_NAME" 5.3.0.5 "$task_work/gate"
+      - name: Record bounded non-binary gate evidence
+        if: always()
+        run: |
+          task_work="$RUNNER_TEMP/jc11-gate"
+          if test -f "$task_work/gate/results.txt"; then cat "$task_work/gate/results.txt"; fi
+          if test -f "$task_work/gate/audit.txt"; then grep '^FAIL' "$task_work/gate/audit.txt" || true; fi
+          for part in old new boot2; do
+            if test -f "$task_work/gate/$part-engine.log"; then
+              grep -aE 'engine-ui-hook:.*(output|JC11|pack)|SCPROBE error|Syntax error|Type .* unavailable|QQmlComponent: Component is not ready|Crash with' "$task_work/gate/$part-engine.log" | head -40 || true
+            fi
+          done
+          # No image, rootfs, vendor QML, test key, gateway state or generated archive is uploaded.
