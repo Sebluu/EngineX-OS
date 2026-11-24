@@ -2,7 +2,7 @@ name: PRIME 4 isolated installed-Mod reboot gate
 on:
   push:
     branches: [test/all-features]
-    paths: ['.github/workflows/prime4-installed-mods-gate.yml', 'tools/az01-packer/prime4-installed-mods-gate.py', 'tools/mods/seed_prime4_gate.go']
+    paths: ['.github/workflows/prime4-installed-mods-gate.yml', 'tools/az01-packer/prime4-installed-mods-gate.py', 'tools/mods/seed_prime4_gate.go', 'tools/ui-mod/**', 'tools/mods/build_*dsp*', 'tools/mods/*prime4_led*', 'pkg/webui/**', 'pkg/mods/**', 'rootfs-overlay/**']
   workflow_dispatch:
 permissions:
   contents: read
