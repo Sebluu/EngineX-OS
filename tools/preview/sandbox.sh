@@ -66,9 +66,12 @@ echo 0-3 > "$root/proc/irq/41/smp_affinity_list"
 mkdir -p "$root/tmp/preview/plugins/generic"
 cp "$work/bridge.so" "$root/tmp/preview/plugins/generic/libenginexpreview.so"
 if [ "$PREVIEW_MODE" = smoke ]; then
-    probe="$work/data/enginex/ui/packs/en/Skins/Common/Items/QmlWarnings.qml"
-    mkdir -p "$(dirname "$probe")"
-    cp "$PREVIEW_REPO/tools/preview/smoke-probe.qml" "$probe"
+    for pack in "$work/data/enginex/ui/packs/"*; do
+        [ -d "$pack" ] || continue
+        probe="$pack/Skins/Common/Items/QmlWarnings.qml"
+        mkdir -p "$(dirname "$probe")"
+        cp "$PREVIEW_REPO/tools/preview/smoke-probe.qml" "$probe"
+    done
 fi
 run /usr/bin/dbus-daemon --system --fork --nopidfile > "$work/dbus.log" 2>&1
 if [ -f "$work/backend" ]; then

@@ -2,6 +2,7 @@
 import json
 from pathlib import Path
 import socket
+import re
 import sys
 import time
 from PIL import Image
@@ -12,8 +13,9 @@ while time.monotonic() < deadline:
     try:
         meta = json.loads((runtime / 'frame.json').read_text())
         image = Image.open(runtime / 'frame.png').convert('RGB')
-        red = sum(r > 200 and g < 80 and b < 80 for r, g, b in image.crop((20, 20, 130, 130)).getdata())
-        if meta['width'] == image.width and meta['height'] == image.height and red > 3000:
+        red = sum(r > 200 and g < 80 and b < 80 for r, g, b in image.getdata())
+        target = re.search(r'PREVIEW_TARGET\|([0-9.]+)\|([0-9.]+)\|', log.read_text(errors='replace'))
+        if meta['width'] == image.width and meta['height'] == image.height and red > 3000 and target:
             break
     except (OSError, ValueError, KeyError):
         pass
@@ -21,8 +23,9 @@ while time.monotonic() < deadline:
 else:
     raise SystemExit('real Engine framebuffer or CI input target was not rendered')
 
+x,y=target.groups()
 with socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM) as client:
-    for packet in (b'M 1 60 60 1 1 0', b'M 3 60 60 1 0 0', b'K 1 65 0 97', b'K 3 65 0 97'):
+    for packet in (f'M 1 {x} {y} 1 1 0'.encode(), f'M 3 {x} {y} 1 0 0'.encode(), b'K 1 65 0 97', b'K 3 65 0 97'):
         client.sendto(packet, str(runtime / 'control.sock'))
         time.sleep(.15)
 deadline = time.monotonic() + 15
