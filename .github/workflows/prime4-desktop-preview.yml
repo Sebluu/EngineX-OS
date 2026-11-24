@@ -64,7 +64,7 @@ jobs:
           mkdir "$task_work/stock-root"
           debugfs -R "rdump / $task_work/stock-root" "$task_work/stock-parts/rootfs.ext2" 2>"$task_work/stock-debugfs.log"
           mkdir -p "$task_work/runtime"
-          sudo env "PATH=$PATH" "GITHUB_ACTIONS=true" bash tools/preview/build.sh "$task_work"
+          GITHUB_ACTIONS=true bash tools/preview/build.sh "$task_work"
           sudo env "PATH=$PATH" "GITHUB_ACTIONS=true" bash tools/preview/sandbox.sh "$task_work" smoke
           sudo env "PATH=$PATH" "GITHUB_ACTIONS=true" bash tools/preview/sandbox.sh "$task_work" smoke
       - name: Bounded diagnostic evidence

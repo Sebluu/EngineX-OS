@@ -14,6 +14,9 @@ arm-linux-gnueabihf-g++ -std=c++17 -O2 -Wall -Wextra -Werror -shared -fPIC -pthr
     -I"$sdk" -I"$sdk/QtCore" -I"$sdk/QtGui" -I"$sdk/QtQuick" -I"$sdk/QtQml" \
     -o "$work/bridge.so" tools/preview/bridge.cpp -L"$work/qt-sdk/usr/lib/arm-linux-gnueabihf" -l:libQt6Test.so.6
 GOOS=linux GOARCH=arm GOARM=7 CGO_ENABLED=0 go build -trimpath -o "$work/backend" tools/preview/backend.go
+OUT="$work/libengine-ui-hook.so" sh tools/ui-mod/build.sh
+cp "$work/libengine-ui-hook.so" "$work/root/etc/enginex/libengine-ui-hook.so"
+cp "$work/libengine-ui-hook.so" "$work/root/usr/local/lib/enginex/libengine-ui-hook.so"
 arm-linux-gnueabihf-gcc -O2 -shared -fPIC tools/ui-mod/qrc_dump.c -ldl -o "$work/qrc-dump.so"
 if [ ! -d "$work/qrc" ]; then
     # Read vendor resources from the unmodified, hash-pinned stock tree.
