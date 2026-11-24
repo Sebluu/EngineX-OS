@@ -22,7 +22,7 @@ def inside_vm():
 
 def packet(body, width, height):
     if body.get('kind') == 'pointer':
-        action = {'down': 1, 'move': 2, 'up': 3, 'double': 4}.get(body.get('action'))
+        action = {'down': 1, 'move': 2, 'up': 3}.get(body.get('action'))
         x, y = body.get('x'), body.get('y')
         button, buttons, mods = body.get('button', 0), body.get('buttons', 0), body.get('mods', 0)
         if action is None or any(type(v) not in (int, float) or not math.isfinite(v) for v in (x, y)):

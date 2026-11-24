@@ -16,6 +16,8 @@
 
 </div>
 
+> **实验性本地预览分支：** 在本地浏览器虚拟机中体验 PRIME 4 原版 ARM 界面，无需 AI 或 token。EQ/SUB 音频能力仅供界面反馈模拟。[安装步骤与限制](docs/desktop-preview.md)。此分支未发布可安装到碟机的版本。
+
 <br>
 
 **EngineX OS 5.3.0.5** 是基于官方 Engine OS 5.3.0+ 构建的定制系统，支持天龙 Denon DJ、Numark 与 Rane 共 16 款独立设备：

@@ -16,6 +16,8 @@
 
 </div>
 
+> **Experimental local preview branch:** Try the original PRIME 4 ARM interface in a local browser VM without AI or token usage. EQ/SUB audio capabilities are simulated for UI feedback. [Setup and limitations](docs/desktop-preview.md). This branch does not publish a device-installable release.
+
 <br>
 
 **EngineX OS 5.3.0.5** is a custom system built on the official Engine OS 5.3.0+ base for all 16 Denon DJ, Numark, and Rane standalone units:

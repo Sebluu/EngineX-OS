@@ -16,7 +16,9 @@ arm-linux-gnueabihf-g++ -std=c++17 -O2 -Wall -Wextra -Werror -shared -fPIC -pthr
 GOOS=linux GOARCH=arm GOARM=7 CGO_ENABLED=0 go build -trimpath -o "$work/backend" tools/preview/backend.go
 arm-linux-gnueabihf-gcc -O2 -shared -fPIC tools/ui-mod/qrc_dump.c -ldl -o "$work/qrc-dump.so"
 if [ ! -d "$work/qrc" ]; then
-    python3 -I tools/ui-mod/extract_qrc.py --tree "$work/root" --preload "$work/qrc-dump.so" --out "$work/qrc"
+    # Read vendor resources from the unmodified, hash-pinned stock tree.
+    # The published EngineX tree has its own first-boot preparation contract.
+    python3 -I tools/ui-mod/extract_qrc.py --tree "$work/stock-root" --preload "$work/qrc-dump.so" --out "$work/qrc"
 fi
 python3 tools/ui-mod/build_packs.py --qrc "$work/qrc" --out "$work/packs"
 # No firmware is repacked: these UI assets belong only to this VM's copied root.

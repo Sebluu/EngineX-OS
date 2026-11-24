@@ -30,7 +30,7 @@ python3 tools/preview/launch.py
 
 The launcher opens <http://127.0.0.1:8765> once the local viewer is ready.
 The first start downloads a checksum-pinned Ubuntu cloud image, the published
-EngineX PRIME 4 baseline and build dependencies. The VM compiles the preview
+stock PRIME 4 firmware, published EngineX baseline and build dependencies. The VM compiles the preview
 tools from the checked-out commit. This initial preparation takes substantially
 longer than later starts; watch progress with a second terminal:
 

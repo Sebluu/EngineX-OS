@@ -24,6 +24,8 @@ jobs:
           mkdir "$RUNNER_TEMP/desktop-preview"
           curl --fail --location --retry 2 --max-time 180 'https://github.com/Cd1s/EngineX-OS/releases/download/v5.3.0.5-r1/PRIME4-5.3.0.5-EngineX-OS-Denon-PRIME-4-JC11-Update.img' -o "$RUNNER_TEMP/desktop-preview/baseline.img"
           echo "a76b3eaefdb24dab01ec70f2316c0809a6b25d281fa6c03d751437463a1f25e6  $RUNNER_TEMP/desktop-preview/baseline.img" | sha256sum -c -
+          curl --fail --location --retry 2 --max-time 180 'https://public.inmusiccdn.com/Engine/5.3.0/RELEASE/d41cd81e67f225bf/PRIME4-5.3.0-Update.img' -o "$RUNNER_TEMP/desktop-preview/stock.img"
+          echo "8e49313be0ef338d5452631c5772ee5b1d72e076cae65bf69a6df8b5b210029f  $RUNNER_TEMP/desktop-preview/stock.img" | sha256sum -c -
       - name: Install cross compiler and fetch Qt 6 public headers
         timeout-minutes: 8
         run: |
@@ -58,6 +60,9 @@ jobs:
           python3 -I tools/az01-packer/az01_packer.py unpack "$task_work/baseline.img" --output "$task_work/parts"
           mkdir "$task_work/root"
           debugfs -R "rdump / $task_work/root" "$task_work/parts/rootfs.ext2" 2>"$task_work/debugfs.log"
+          python3 -I tools/az01-packer/az01_packer.py unpack "$task_work/stock.img" --output "$task_work/stock-parts"
+          mkdir "$task_work/stock-root"
+          debugfs -R "rdump / $task_work/stock-root" "$task_work/stock-parts/rootfs.ext2" 2>"$task_work/stock-debugfs.log"
           mkdir -p "$task_work/runtime"
           sudo env "PATH=$PATH" "GITHUB_ACTIONS=true" bash tools/preview/build.sh "$task_work"
           sudo env "PATH=$PATH" "GITHUB_ACTIONS=true" bash tools/preview/sandbox.sh "$task_work" smoke

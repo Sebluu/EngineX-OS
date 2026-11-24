@@ -1,6 +1,7 @@
 'use strict';
 const screen = document.getElementById('screen'), image = document.getElementById('frame');
-let frame = null, lastMove = 0;
+let frame = null, lastMove = 0, inputQueue = Promise.resolve(), heldButton = 0;
+const heldKeys = new Map();
 const mods = e => (e.shiftKey ? 0x02000000 : 0) | (e.ctrlKey ? 0x04000000 : 0) | (e.altKey ? 0x08000000 : 0) | (e.metaKey ? 0x10000000 : 0);
 async function post(path, body) {
   const response = await fetch(path, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
@@ -12,10 +13,13 @@ function pointer(e, action) {
   const rect = image.getBoundingClientRect();
   const x = Math.max(0, Math.min(frame.width - 1, (e.clientX - rect.left) * frame.width / rect.width));
   const y = Math.max(0, Math.min(frame.height - 1, (e.clientY - rect.top) * frame.height / rect.height));
-  post('/api/input', {kind:'pointer', action, x, y, button:action==='move'?0:[1,4,2][e.button]||0, buttons:e.buttons, mods:mods(e)}).catch(()=>{});
+  const button = action==='move'?0:(heldButton||[1,4,2][e.button]||0);
+  sendInput({kind:'pointer', action, x, y, button, buttons:action==='up'?0:e.buttons, mods:mods(e)});
 }
-screen.addEventListener('pointerdown', e => {e.preventDefault();screen.focus();screen.setPointerCapture(e.pointerId);pointer(e,'down');});
-screen.addEventListener('pointerup', e => {e.preventDefault();pointer(e,'up');});
+function sendInput(body){inputQueue=inputQueue.then(()=>post('/api/input',body)).catch(()=>{});}
+screen.addEventListener('pointerdown', e => {e.preventDefault();heldButton=[1,4,2][e.button]||1;screen.focus();screen.setPointerCapture(e.pointerId);pointer(e,'down');});
+screen.addEventListener('pointerup', e => {e.preventDefault();pointer(e,'up');heldButton=0;});
+screen.addEventListener('pointercancel', e => {pointer(e,'up');heldButton=0;});
 screen.addEventListener('pointermove', e => {if(performance.now()-lastMove>30){lastMove=performance.now();pointer(e,'move');}});
 screen.addEventListener('contextmenu', e=>e.preventDefault());
 const keys={Backspace:0x01000003,Tab:0x01000001,Enter:0x01000004,Escape:0x01000000,Delete:0x01000007,Home:0x01000010,End:0x01000011,ArrowLeft:0x01000012,ArrowUp:0x01000013,ArrowRight:0x01000014,ArrowDown:0x01000015,PageUp:0x01000016,PageDown:0x01000017,Shift:0x01000020,Control:0x01000021,Meta:0x01000022,Alt:0x01000023};
@@ -24,10 +28,14 @@ function keyboard(e,action){
   const chars=Array.from(e.key), text=chars.length===1?e.key.codePointAt(0):0;
   const key=keys[e.key]||(chars.length===1?e.key.toUpperCase().codePointAt(0):0);
   if(!key)return;
-  e.preventDefault();post('/api/input',{kind:'key',action,key,text,mods:mods(e)}).catch(()=>{});
+  e.preventDefault();
+  const body={kind:'key',action,key,text,mods:mods(e)};
+  if(action==='down')heldKeys.set(key,body);else heldKeys.delete(key);
+  sendInput(body);
 }
 screen.addEventListener('keydown',e=>keyboard(e,'down'));
 screen.addEventListener('keyup',e=>keyboard(e,'up'));
+screen.addEventListener('blur',()=>{for(const body of heldKeys.values())sendInput({...body,action:'up'});heldKeys.clear();});
 function save(blob,name){const url=URL.createObjectURL(blob),link=document.createElement('a');link.href=url;link.download=name;link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
 document.getElementById('feedback').onclick=async()=>{try{const report=await post('/api/feedback',{note:document.getElementById('note').value});save(new Blob([JSON.stringify(report,null,2)],{type:'application/json'}),'enginex-feedback.json');}catch(e){document.getElementById('notice').textContent=e.message;}};
 document.getElementById('picture').onclick=async()=>{const response=await fetch('/frame.png');if(response.ok)save(await response.blob(),'enginex-preview.png');};

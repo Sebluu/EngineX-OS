@@ -32,3 +32,15 @@ if [ ! -d "$work/root" ]; then
     mkdir "$work/root"
     debugfs -R "rdump / $work/root" "$work/parts/rootfs.ext2" 2>"$work/debugfs.log"
 fi
+stock=PRIME4-5.3.0-stock.img
+if [ ! -f "$stock" ]; then
+    curl --fail --location --retry 2 'https://public.inmusiccdn.com/Engine/5.3.0/RELEASE/d41cd81e67f225bf/PRIME4-5.3.0-Update.img' -o "$stock.download"
+    echo '8e49313be0ef338d5452631c5772ee5b1d72e076cae65bf69a6df8b5b210029f  PRIME4-5.3.0-stock.img.download' | sha256sum -c -
+    mv "$stock.download" "$stock"
+fi
+echo '8e49313be0ef338d5452631c5772ee5b1d72e076cae65bf69a6df8b5b210029f  PRIME4-5.3.0-stock.img' | sha256sum -c -
+if [ ! -d "$work/stock-root" ]; then
+    python3 -I "$repo/tools/az01-packer/az01_packer.py" unpack "$PWD/$stock" --output "$work/stock-parts"
+    mkdir "$work/stock-root"
+    debugfs -R "rdump / $work/stock-root" "$work/stock-parts/rootfs.ext2" 2>"$work/stock-debugfs.log"
+fi
