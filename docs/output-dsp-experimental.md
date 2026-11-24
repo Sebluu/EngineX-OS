@@ -10,8 +10,8 @@ are excluded. Adaptive loudness and DSP protection remain out of scope.
 | feature/dsp-core | Off | Off | Inert integration foundation |
 | feature/output-eq | On | Off | Output Equalizer topic |
 | feature/subharmonic-synth | Off | On | Octave synthesizer topic |
-| feature/button-led-behavior | No DSP changes | No DSP changes | Read-only LED evidence; behavior not implemented |
-| test/all-features | On | On | Offline integration checks, including LED evidence tools |
+| feature/button-led-behavior | No DSP changes | No DSP changes | QML-only steady PLAY/DJ-FX/Sweep-FX Mod, experimental |
+| test/all-features | On | On | Offline integration checks, including LED Mod and fixture checks |
 
 ## Mod Hub split
 
@@ -25,9 +25,11 @@ QML-only Mod archives with standard mod.json / qmlFiles: Output Equalizer and
 Subharmonic Synthesizer. They contain no firmware, executable, lifecycle script,
 dependency installer or service. They stay out of the official registry until
 release validation is complete; installing one on stock EngineX cannot add DSP.
-Settings → Mixer launches the enabled Mod's panel lazily. A panel failure is
+Settings → Mixer → Output Equalizer (or Subharmonic Synthesizer) launches the enabled Mod's panel lazily. A panel failure is
 confined to the optional Loader instead of importing Controls into the startup
 UI. No speculative Touch FX shortcut is generated.
+
+A third, independent QML-only prime4-steady-leds Mod controls PLAY, DJ-FX and Sweep-FX indicators without the DSP core or a firmware edit. Its builder verifies original module hashes and a uniquely JC11 assignment context. See docs/prime4-steady-button-leds.md for validation and restart limits.
 
 All processing defaults off. EQ offers eight bands (90 Hz low shelf;
 180/350/750/1500/3000/8000 Hz bells; 19 kHz high shelf), advanced frequency/Q and
@@ -66,12 +68,36 @@ loading, existing mocked boot/fallback and rootfs-overlay regression suites,
 ARM64 native callback guard/budget and ARMv7 cross-link/emulated functionality.
 Emulation does not establish the PRIME 4's real-time deadline.
 
+The official 5.3.0 PRIME 4 fixture (SHA-256
+8e49313be0ef338d5452631c5772ee5b1d72e076cae65bf69a6df8b5b210029f)
+has been downloaded and its real QRC extracted (2,623 files). All four matching
+UI packs build successfully. The LED archive passes 28 Qt binding cases,
+cross-file JC11 scope checks and the standard Go loader's disabled install,
+enable, persisted enable, disable, quarantine and uninstall checks.
+
+Confirmed source checks:
+
+- [Integrated C/Go/ARM/component suite](https://github.com/Sebluu/EngineX-OS/actions/runs/45311793487).
+- [DSP core topic](https://github.com/Sebluu/EngineX-OS/actions/runs/45308475144),
+  [EQ topic](https://github.com/Sebluu/EngineX-OS/actions/runs/45308483012),
+  [SUB topic](https://github.com/Sebluu/EngineX-OS/actions/runs/45308491168).
+- [Official QRC, 28 LED states, creation context, loader and matching packs](https://github.com/Sebluu/EngineX-OS/actions/runs/45311893936).
+
+An additional integration-only workflow,
+prime4-installed-mods-gate.yml, prepares a temporary candidate from the pinned
+published JC11 5.3.0.5-r1 baseline. It compiles this branch's suite/hook/UI packs,
+seeds all three Mods through the real loader, and adds assertions to a private
+copy of the unchanged upstream release gate. Its sandbox revision is r2
+without changing the project version or creating a Release. Images, vendor
+files, test signing keys and archives are never uploaded. This gate is **not
+yet certified**; its final result must be reviewed separately.
+
 Still mandatory before any deck installation:
 
 - Native armhf callback/budget tests on the project's supported build host,
   including the PRIME 4's actual CPU margin.
-- Build against the exact official QRC and rootfs; verify Settings placement,
-  controller/mixer assignments and native Engine startup.
+- Verify Settings placement and physical controller/mixer assignments;
+  the successful QRC build alone does not certify native Engine startup.
 - Isolated rootfs release gates on populated /data, repeated restarts,
   interrupted install/upgrade, quarantine, stock fallback and uninstall.
   Unit fixtures do not certify these scenarios.
@@ -79,7 +105,9 @@ Still mandatory before any deck installation:
   repeated changes and audio continuity.
 
 The normal recovery guard and stock fallback remain responsible for recovery.
-No Factory Reset, --erase-data, updater or device reboot is part of these tests.
+No real device is connected. No Factory Reset, --erase-data, firmware flashing
+or physical device reboot is authorized or performed by these tests. Updater
+verification, where exercised, is confined to the isolated rootfs gate.
 Passing CI cannot guarantee that an installed experimental build cannot brick
 or fail to boot. Do not distribute these source branches as installable
 firmware or publish the Mods as compatible with stock EngineX.
