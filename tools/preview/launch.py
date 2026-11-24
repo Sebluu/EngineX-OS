@@ -68,7 +68,7 @@ systemctl start --no-block enginex-preview.service
         'package_update':True,
         'packages':['build-essential','g++-arm-linux-gnueabihf','libc6-dev-armhf-cross',
                     'qt6-base-dev-tools','qemu-user','qemu-user-static','binfmt-support','e2fsprogs',
-                    'zstd','python3-pil','iproute2','curl','git','golang-go','xz-utils'],
+                    'zstd','python3-pil','iproute2','curl','git','golang-go','xz-utils','patchelf'],
         'write_files':entries,
         'runcmd':[['bash','/var/lib/enginex-preview/bootstrap.sh']],
         'ssh_pwauth':False,

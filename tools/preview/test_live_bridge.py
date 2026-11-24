@@ -15,14 +15,17 @@ while time.monotonic() < deadline:
         meta = json.loads((runtime / 'frame.json').read_text())
         image = Image.open(runtime / 'frame.png').convert('RGB')
         red = sum(r > 200 and g < 80 and b < 80 for r, g, b in image.getdata())
+        blue = sum(b > 200 and r < 80 and g < 80 for r, g, b in image.getdata())
         target = re.search(r'PREVIEW_TARGET\|([0-9.]+)\|([0-9.]+)\|', log.read_text(errors='replace'))
-        if meta['width'] == image.width and meta['height'] == image.height and red > 3000 and target:
+        if meta['width'] == image.width and meta['height'] == image.height and red > 3000 and blue > 3000 and meta['renderer'] == 'opengl' and target:
             break
     except (OSError, ValueError, KeyError):
         pass
     time.sleep(.5)
 else:
-    raise SystemExit('real Engine framebuffer or CI input target was not rendered')
+    raise SystemExit('real Engine framebuffer, custom scene-graph geometry or CI input target was not rendered')
+
+print('PASS full OpenGL scene graph: custom geometry rendered in the original Engine, without a host GPU')
 
 x,y=target.groups()
 with socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM) as client:

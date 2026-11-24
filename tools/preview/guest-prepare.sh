@@ -45,3 +45,4 @@ if [ ! -d "$work/stock-root" ]; then
     mkdir "$work/stock-root"
     debugfs -R "rdump / $work/stock-root" "$work/stock-parts/rootfs.ext2" 2>"$work/stock-debugfs.log"
 fi
+bash "$repo/tools/preview/mesa.sh" "$work"

@@ -9,6 +9,9 @@
 #include <QPointer>
 #include <QQuickWindow>
 #include <QQuickItem>
+#include <QSGGeometryNode>
+#include <QSGFlatColorMaterial>
+#include <QSGRendererInterface>
 #include <QTimer>
 #include <QtTest/qtestspontaneevent.h>
 #include <QtTest/qtesttouch.h>
@@ -42,6 +45,29 @@ QPointingDevice *touchDevice = nullptr;
 bool touching = false;
 QPointer<QQuickWindow> selected;
 
+// The firmware uses custom scene-graph geometry. Qt's raster backend silently
+// omits those nodes. CI must exercise one, in the real Engine scene, to catch it.
+class RenderProbe final : public QQuickItem {
+public:
+    explicit RenderProbe(QQuickItem *parent) : QQuickItem(parent) {
+        setFlag(ItemHasContents, true);
+        setX(200); setY(20); setWidth(120); setHeight(120); setZ(100000000);
+    }
+    QSGNode *updatePaintNode(QSGNode *old, UpdatePaintNodeData *) override {
+        if (old) return old;
+        auto *node = new QSGGeometryNode();
+        auto *geometry = new QSGGeometry(QSGGeometry::defaultAttributes_Point2D(), 3);
+        geometry->setDrawingMode(QSGGeometry::DrawTriangles);
+        auto *points = geometry->vertexDataAsPoint2D();
+        points[0].set(0, 120); points[1].set(60, 0); points[2].set(120, 120);
+        auto *material = new QSGFlatColorMaterial();
+        material->setColor(Qt::blue);
+        node->setGeometry(geometry); node->setMaterial(material);
+        node->setFlag(QSGNode::OwnsGeometry); node->setFlag(QSGNode::OwnsMaterial);
+        return node;
+    }
+};
+
 QQuickWindow *window() {
     QQuickWindow *preferred = qobject_cast<QQuickWindow *>(QGuiApplication::modalWindow());
     if (!preferred) preferred = qobject_cast<QQuickWindow *>(QGuiApplication::focusWindow());
@@ -58,6 +84,8 @@ QQuickWindow *window() {
     if (largest) {
         largest->resize(1280, 800);
         largest->requestActivate();
+        const char *smoke = getenv("ENGINEX_PREVIEW_SMOKE");
+        if (smoke && *smoke) new RenderProbe(largest->contentItem());
     }
     return largest;
 }
@@ -144,8 +172,10 @@ void capture() {
     if (rename("/tmp/preview/frame.new.png", "/tmp/preview/frame.png")) return;
     FILE *meta = fopen("/tmp/preview/frame.new.json", "w");
     if (!meta) return;
-    fprintf(meta, "{\"width\":%d,\"height\":%d,\"frame\":%llu,\"renderer\":\"software\"}\n",
-            image.width(), image.height(), static_cast<unsigned long long>(++frame));
+    const auto api = target->rendererInterface()->graphicsApi();
+    fprintf(meta, "{\"width\":%d,\"height\":%d,\"frame\":%llu,\"renderer\":\"%s\"}\n",
+            image.width(), image.height(), static_cast<unsigned long long>(++frame),
+            api == QSGRendererInterface::OpenGL ? "opengl" : api == QSGRendererInterface::Software ? "software" : "other");
     fclose(meta);
     rename("/tmp/preview/frame.new.json", "/tmp/preview/frame.json");
 }

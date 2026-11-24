@@ -67,6 +67,7 @@ mkdir -p "$root/usr/local/lib/enginex-preview/plugins/generic"
 # /run is deliberately noexec on Ubuntu. Keep runtime data there, and place
 # executable helpers/plugins on this copied root's normal program filesystem.
 cp "$work/bridge.so" "$root/usr/local/lib/enginex-preview/plugins/generic/libenginexpreview.so"
+cp "$work/egl-preview.so" "$root/usr/local/lib/enginex-preview/egl-preview.so"
 if [ "$PREVIEW_MODE" = smoke ]; then
     cp "$PREVIEW_REPO/tools/preview/smoke-target.qml" "$root/tmp/preview/smoke-target.qml"
     for pack in "$work/data/enginex/ui/packs/"*; do
@@ -94,12 +95,15 @@ start_engine() {
 rm -f "$work/runtime/frame.json" "$work/runtime/frame.png" "$work/runtime/restart.request"
 echo starting > "$work/runtime/engine.state"
 chroot "$root" /usr/bin/env -i PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
-    HOME=/tmp/home LD_LIBRARY_PATH=/usr/qt/lib QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software \
+    HOME=/tmp/home QT_QPA_PLATFORM=minimalegl QSG_RHI_BACKEND=opengl QSG_RENDER_LOOP=basic \
+    EGL_PLATFORM=surfaceless LIBGL_ALWAYS_SOFTWARE=1 GALLIUM_DRIVER=llvmpipe LP_NUM_THREADS=2 \
+    LIBGL_DRIVERS_PATH=/opt/enginex-preview-mesa/usr/lib/arm-linux-gnueabihf/dri \
+    __EGL_VENDOR_LIBRARY_FILENAMES=/opt/enginex-preview-mesa/usr/share/glvnd/egl_vendor.d/50_mesa.json \
     ENGINEX_DESKTOP_PREVIEW=1 MALLOC_ARENA_MAX=1 \
     ENGINEX_PREVIEW_SMOKE="$([ "$PREVIEW_MODE" = smoke ] && echo 1 || true)" \
     QT_DEBUG_PLUGINS="$([ "$PREVIEW_MODE" = smoke ] && echo 1 || echo 0)" \
     QT_PLUGIN_PATH=/usr/local/lib/enginex-preview/plugins:/usr/lib/plugins QT_QPA_GENERIC_PLUGINS=enginexpreview \
-    LD_PRELOAD=/etc/enginex/libengine-ui-hook.so \
+    LD_PRELOAD=/etc/enginex/libengine-ui-hook.so:/usr/local/lib/enginex-preview/egl-preview.so \
     /usr/Engine/Engine -d0 > "$work/engine.log" 2>&1 &
 engine=$!
 }

@@ -9,6 +9,8 @@ mkdir -p "$work/bin"
 if [ "${GITHUB_ACTIONS:-}" != true ]; then
     grep -Eqi 'QEMU|Standard PC' /sys/class/dmi/id/product_name || exit 2
 fi
+arm-linux-gnueabihf-gcc -std=c11 -O2 -Wall -Wextra -Werror -shared -fPIC \
+    -I"$work/mesa/root/usr/include" -o "$work/egl-preview.so" tools/preview/egl-preview.c -ldl
 /usr/lib/qt6/libexec/moc -I"$sdk" -I"$sdk/QtCore" -I"$sdk/QtGui" tools/preview/bridge.cpp -o "$work/bridge.moc"
 arm-linux-gnueabihf-g++ -std=c++17 -O2 -Wall -Wextra -Werror -shared -fPIC -pthread -I"$work" \
     -I"$sdk" -I"$sdk/QtCore" -I"$sdk/QtGui" -I"$sdk/QtQuick" -I"$sdk/QtQml" \
