@@ -63,8 +63,10 @@ mount -t tmpfs tmpfs "$root/proc/irq"
 mkdir -p "$root/proc/irq/41"
 echo f > "$root/proc/irq/41/smp_affinity"
 echo 0-3 > "$root/proc/irq/41/smp_affinity_list"
-mkdir -p "$root/tmp/preview/plugins/generic"
-cp "$work/bridge.so" "$root/tmp/preview/plugins/generic/libenginexpreview.so"
+mkdir -p "$root/usr/local/lib/enginex-preview/plugins/generic"
+# /run is deliberately noexec on Ubuntu. Keep runtime data there, and place
+# executable helpers/plugins on this copied root's normal program filesystem.
+cp "$work/bridge.so" "$root/usr/local/lib/enginex-preview/plugins/generic/libenginexpreview.so"
 if [ "$PREVIEW_MODE" = smoke ]; then
     cp "$PREVIEW_REPO/tools/preview/smoke-target.qml" "$root/tmp/preview/smoke-target.qml"
     for pack in "$work/data/enginex/ui/packs/"*; do
@@ -76,8 +78,8 @@ if [ "$PREVIEW_MODE" = smoke ]; then
 fi
 run /usr/bin/dbus-daemon --system --fork --nopidfile > "$work/dbus.log" 2>&1
 if [ -f "$work/backend" ]; then
-    cp "$work/backend" "$root/tmp/preview/backend"
-    run /tmp/preview/backend > "$work/backend.log" 2>&1 &
+    cp "$work/backend" "$root/usr/local/bin/enginex-preview-backend"
+    run /usr/local/bin/enginex-preview-backend > "$work/backend.log" 2>&1 &
 else
     run /usr/local/bin/stream-sync --listen 127.0.0.1:8080 --deemixd= --relay-url= --disable-guard --state-dir /data/enginex/state > "$work/backend.log" 2>&1 &
 fi
@@ -96,7 +98,7 @@ chroot "$root" /usr/bin/env -i PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/us
     ENGINEX_DESKTOP_PREVIEW=1 MALLOC_ARENA_MAX=1 \
     ENGINEX_PREVIEW_SMOKE="$([ "$PREVIEW_MODE" = smoke ] && echo 1 || true)" \
     QT_DEBUG_PLUGINS="$([ "$PREVIEW_MODE" = smoke ] && echo 1 || echo 0)" \
-    QT_PLUGIN_PATH=/tmp/preview/plugins:/usr/lib/plugins QT_QPA_GENERIC_PLUGINS=enginexpreview \
+    QT_PLUGIN_PATH=/usr/local/lib/enginex-preview/plugins:/usr/lib/plugins QT_QPA_GENERIC_PLUGINS=enginexpreview \
     LD_PRELOAD=/etc/enginex/libengine-ui-hook.so \
     /usr/Engine/Engine -d0 > "$work/engine.log" 2>&1 &
 engine=$!
