@@ -4,6 +4,7 @@ import QtQuick.Controls
 import QtQuick.Window
 Popup {
     id: marker
+    objectName: "enginex-preview-smoke-popup"
     x: 20; y: 20; width: 120; height: 120
     padding: 0; modal: true; focus: true; enabled: true
     parent: Overlay.overlay; z: 10000000

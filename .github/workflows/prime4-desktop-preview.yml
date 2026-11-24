@@ -18,6 +18,9 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
       - name: Obtain pinned baseline in disposable storage
         run: |
           set -euo pipefail
@@ -50,6 +53,8 @@ jobs:
           arm-linux-gnueabihf-g++ -I"$RUNNER_TEMP/desktop-preview" -std=c++17 -O2 -Wall -Wextra -Werror -shared -fPIC -pthread -I"$sdk" -I"$sdk/QtCore" -I"$sdk/QtGui" -I"$sdk/QtQuick" -I"$sdk/QtQml" -o "$RUNNER_TEMP/desktop-preview/bridge.so" tools/preview/bridge.cpp
           bash -n tools/preview/*.sh
           python3 -m unittest discover -s tools/preview -p test_preview.py -v
+          python3 -m unittest discover -s tools/preview -p test_frames.py -v
+          node --test tools/preview/test_frontend.mjs
           gofmt -w tools/preview/backend.go
           GOOS=linux GOARCH=arm GOARM=7 CGO_ENABLED=0 go build -trimpath -o "$RUNNER_TEMP/desktop-preview/backend" tools/preview/backend.go
       - name: Extract and run actual ARM Engine with synthetic input target
@@ -123,6 +128,9 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
       - name: Install local VM launcher dependencies
         run: |
           sudo apt-get update

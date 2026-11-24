@@ -8,6 +8,7 @@ from pathlib import Path
 import socket
 import subprocess
 import threading
+import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlsplit
 
@@ -54,7 +55,19 @@ class PreviewServer(ThreadingHTTPServer):
             value = json.loads((self.runtime / 'frame.json').read_text())
             if any(type(value.get(k)) is not int or not 0 < value[k] < 10000 for k in ('width', 'height')):
                 return {}
-            return {k: value[k] for k in ('width', 'height', 'frame', 'renderer')}
+            result = {k: value[k] for k in ('width', 'height', 'frame', 'renderer')}
+            # A frame from the previous Engine process must not reappear while
+            # its encoder finishes during an application restart.
+            if 'stream' in value:
+                if value['stream'] != (self.runtime / 'engine.session').read_text().strip():
+                    return {}
+                result['stream'] = value['stream']
+            for name in ('readbackMs', 'encodeMs', 'capturedAtMs'):
+                if type(value.get(name)) in (int, float) and math.isfinite(value[name]) and value[name] >= 0:
+                    result[name] = value[name]
+            if 'capturedAtMs' in result:
+                result['ageMs'] = max(0, round(time.monotonic() * 1000 - result['capturedAtMs']))
+            return result
         except (OSError, ValueError, KeyError):
             return {}
 
@@ -82,6 +95,7 @@ class PreviewServer(ThreadingHTTPServer):
         return result
 
 class Handler(BaseHTTPRequestHandler):
+    protocol_version = 'HTTP/1.1'
     def log_message(self, *args):
         pass
 
@@ -118,6 +132,7 @@ class Handler(BaseHTTPRequestHandler):
             state='stopped' if state=='stopped' else 'running' if meta else 'starting'
             self.send(200, json.dumps({'uiOnly': True, 'frame': meta, 'engine': state, 'setup': self.server.setup_state()}).encode())
         elif path == '/frame.png':
+            if not self.server.meta(): self.send(503); return
             try: self.send(200, (self.server.runtime / 'frame.png').read_bytes(), 'image/png')
             except OSError: self.send(503)
         else:

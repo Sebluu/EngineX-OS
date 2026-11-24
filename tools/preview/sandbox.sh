@@ -96,8 +96,11 @@ for attempt in $(seq 120); do
     sleep .5
 done
 run /etc/enginex/engine-ui-guard pre >> "$work/prepare.log" 2>&1
+python3 "$PREVIEW_REPO/tools/preview/frames.py" "$work/runtime" > "$work/frames.log" 2>&1 &
+frames=$!
 start_engine() {
-rm -f "$work/runtime/frame.json" "$work/runtime/frame.png" "$work/runtime/restart.request"
+cat /proc/sys/kernel/random/uuid > "$work/runtime/engine.session"
+rm -f "$work/runtime/frame.json" "$work/runtime/frame.png" "$work/runtime/frame.raw" "$work/runtime/restart.request"
 echo starting > "$work/runtime/engine.state"
 if [ "$PREVIEW_MODE" = smoke ]; then ulimit -c 1048576; fi
 chroot "$root" /usr/bin/env -i PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
@@ -110,6 +113,7 @@ chroot "$root" /usr/bin/env -i PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/us
     LIBGL_DRIVERS_PATH=/opt/enginex-preview-mesa/usr/lib/arm-linux-gnueabihf/dri \
     __EGL_VENDOR_LIBRARY_FILENAMES=/opt/enginex-preview-mesa/usr/share/glvnd/egl_vendor.d/50_mesa.json \
     ENGINEX_DESKTOP_PREVIEW=1 MALLOC_ARENA_MAX=1 \
+    ENGINEX_PREVIEW_SESSION="$(cat "$work/runtime/engine.session")" \
     ENGINEX_PREVIEW_SMOKE="$([ "$PREVIEW_MODE" = smoke ] && echo 1 || true)" \
     QT_DEBUG_PLUGINS="$([ "$PREVIEW_MODE" = smoke ] && echo 1 || echo 0)" \
     QT_PLUGIN_PATH=/usr/local/lib/enginex-preview/plugins:/usr/lib/plugins QT_QPA_GENERIC_PLUGINS=enginexpreview \
@@ -128,7 +132,7 @@ stop_engine() {
     run /etc/enginex/engine-ui-guard stop >> "$work/prepare.log" 2>&1 || true
 }
 start_engine
-trap 'stop_engine; kill -TERM "$backend" 2>/dev/null || true' EXIT
+trap 'stop_engine; kill -TERM "$backend" "$frames" 2>/dev/null || true' EXIT
 trap 'exit 0' TERM INT
 if [ "$PREVIEW_MODE" = smoke ]; then
     for attempt in $(seq 120); do

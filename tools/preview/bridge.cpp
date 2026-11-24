@@ -3,16 +3,16 @@
 #include <QGuiApplication>
 #include <QGenericPlugin>
 #include <QElapsedTimer>
-#include <QImage>
 #include <QKeyEvent>
 #include <QMouseEvent>
 #include <QPointer>
 #include <QQuickWindow>
+#include <QQuickView>
 #include <QQuickItem>
 #include <QSGGeometryNode>
 #include <QSGFlatColorMaterial>
-#include <QSGRendererInterface>
 #include <QTimer>
+#include <QVariant>
 #include <QtTest/qtestspontaneevent.h>
 #include <QtTest/qtesttouch.h>
 #include <cerrno>
@@ -39,11 +39,12 @@ QT_END_NAMESPACE
 namespace {
 constexpr const char *directory = "/tmp/preview";
 int input = -1;
-quint64 frame = 0;
 QElapsedTimer clock;
 QPointingDevice *touchDevice = nullptr;
 bool touching = false;
 QPointer<QQuickWindow> selected;
+QString expectedPanel;
+bool panelReported = false;
 
 // The firmware uses custom scene-graph geometry. Qt's raster backend silently
 // omits those nodes. CI must exercise one, in the real Engine scene, to catch it.
@@ -88,6 +89,17 @@ QQuickWindow *window() {
         if (smoke && *smoke) new RenderProbe(largest->contentItem());
     }
     return largest;
+}
+
+QList<QObject *> uiObjects(QQuickWindow *target) {
+    auto objects = target->findChildren<QObject *>();
+    if (auto *view = qobject_cast<QQuickView *>(target)) {
+        if (auto *root = view->rootObject()) {
+            objects.prepend(root);
+            objects.append(root->findChildren<QObject *>());
+        }
+    }
+    return objects;
 }
 
 void dispatch() {
@@ -144,6 +156,26 @@ void dispatch() {
             // Fallback for a Qt build without the window-system test entry point.
             QSpontaneKeyEvent::setSpontaneous(&event);
             QCoreApplication::instance()->notify(target, &event);
+        } else if (packet[0] == 'D') {
+            const char *smoke = getenv("ENGINEX_PREVIEW_SMOKE");
+            if (!smoke || !*smoke) continue;
+            if (auto *probe = target->findChild<QObject *>(QStringLiteral("enginex-preview-smoke-popup")))
+                QMetaObject::invokeMethod(probe, "close", Qt::DirectConnection);
+            for (QObject *panel : uiObjects(target))
+                if (panel->objectName() == QStringLiteral("outputDSPDialog") && panel->property("visible").toBool()) {
+                    QMetaObject::invokeMethod(panel, "close", Qt::DirectConnection);
+                    break;
+                }
+            if (!strcmp(packet, "D close")) { expectedPanel.clear(); continue; }
+            const QString section = !strcmp(packet, "D eq") ? QStringLiteral("eq") : !strcmp(packet, "D sub") ? QStringLiteral("sub") : QString();
+            if (section.isEmpty()) continue;
+            for (QObject *object : uiObjects(target)) {
+                if (object->metaObject()->indexOfMethod("odOpen(QVariant)") < 0) continue;
+                fprintf(stderr, "PREVIEW_MOD_HOST board=%s mods=%d\n", qPrintable(object->property("scBoard").toString()), object->property("odMods").toInt());
+                expectedPanel = section; panelReported = false;
+                QMetaObject::invokeMethod(object, "odOpen", Qt::DirectConnection, Q_ARG(QVariant, QVariant(section)));
+                break;
+            }
         } else if (sscanf(packet, "K %d %d %d %u", &action, &key, &modifiers, &character) == 4) {
             if ((action != 1 && action != 3) || key < 0 || key > 0x1ffffff || character > 0x10ffff ||
                 (character >= 0xd800 && character <= 0xdfff) || (modifiers & ~0x1e000000)) continue;
@@ -163,21 +195,23 @@ void dispatch() {
     }
 }
 
-void capture() {
+void requestFrame() {
     auto *target = window();
-    if (!target) return;
-    const QImage image = target->grabWindow();
-    if (image.isNull()) return;
-    if (!image.save(QString::fromLatin1(directory) + "/frame.new.png", "PNG", 35)) return;
-    if (rename("/tmp/preview/frame.new.png", "/tmp/preview/frame.png")) return;
-    FILE *meta = fopen("/tmp/preview/frame.new.json", "w");
-    if (!meta) return;
-    const auto api = target->rendererInterface()->graphicsApi();
-    fprintf(meta, "{\"width\":%d,\"height\":%d,\"frame\":%llu,\"renderer\":\"%s\"}\n",
-            image.width(), image.height(), static_cast<unsigned long long>(++frame),
-            api == QSGRendererInterface::OpenGL ? "opengl" : api == QSGRendererInterface::Software ? "software" : "other");
-    fclose(meta);
-    rename("/tmp/preview/frame.new.json", "/tmp/preview/frame.json");
+    // Capture is performed at EGL swap, after the real render pass. Asking for
+    // an update also publishes the final state of an otherwise idle screen.
+    if (target) target->update();
+    if (target && !expectedPanel.isEmpty() && !panelReported) {
+        for (QObject *popup : uiObjects(target)) {
+            if (popup->objectName() != QStringLiteral("outputDSPDialog")) continue;
+            auto *content = popup->property("contentItem").value<QQuickItem *>();
+            if (!popup->property("visible").toBool() || !content || content->property("section").toString() != expectedPanel) continue;
+            if (content->property("message").toString() == QStringLiteral("Ready")) {
+                fprintf(stderr, "PREVIEW_MOD_PANEL_READY section=%s\n", qPrintable(expectedPanel));
+                panelReported = true;
+                break;
+            }
+        }
+    }
 }
 
 void start() {
@@ -199,8 +233,8 @@ void start() {
     QObject::connect(events, &QTimer::timeout, QCoreApplication::instance(), dispatch);
     events->start(20);
     auto *pictures = new QTimer(QCoreApplication::instance());
-    QObject::connect(pictures, &QTimer::timeout, QCoreApplication::instance(), capture);
-    pictures->start(750);
+    QObject::connect(pictures, &QTimer::timeout, QCoreApplication::instance(), requestFrame);
+    pictures->start(200);
     fprintf(stderr, "PREVIEW_BRIDGE_READY Qt=%s\n", qVersion());
     fprintf(stderr, "PREVIEW_GUI_INPUT mouse=%d keyboard=%d\n", qt_handleMouseEvent != nullptr, qt_handleKeyEvent != nullptr);
 }

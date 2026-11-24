@@ -26,6 +26,8 @@ else:
     raise SystemExit('real Engine framebuffer, custom scene-graph geometry or CI input target was not rendered')
 
 print('PASS full OpenGL scene graph: custom geometry rendered in the original Engine, without a host GPU')
+assert meta.get('encodeMs') is not None and meta.get('readbackMs') is not None, 'native frame encoder metrics missing'
+print('Frame timing: readback={} ms, x86 PNG={} ms'.format(meta['readbackMs'], meta['encodeMs']))
 
 x,y=target.groups()
 with socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM) as client:
@@ -62,3 +64,15 @@ state = dsp({'section':'sub','pair':0,'values':values})
 assert state['profiles'][0][0] == 1 and state['profiles'][0][2] == 1 and state['profiles'][0][28] == -3
 saved.write_text(json.dumps(state['profiles']))
 print('PASS preview-only DSP capabilities and persisted EQ/SUB parameter edits')
+
+for section in ('eq', 'sub'):
+    with socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM) as client:
+        client.sendto(('D '+section).encode(), str(runtime/'control.sock'))
+    deadline=time.monotonic()+40
+    while time.monotonic()<deadline:
+        if 'PREVIEW_MOD_PANEL_READY section='+section in log.read_text(errors='replace'):
+            print('PASS original Engine: combined-branch '+section+' settings panel loaded with real SDK data')
+            break
+        time.sleep(.25)
+    else:
+        raise SystemExit('the original Engine could not open the '+section+' Mod settings panel')

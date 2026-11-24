@@ -124,7 +124,14 @@ def main():
         # The old offscreen platform reports an 800-pixel screen inside a
         # 1280-pixel window. EGLFS now reports the correct full screen size.
         frame=json.loads(request('/api/status'))['frame']['frame']
-        click(340 if args.initial_launcher else 100,725)  # Do not show Wi-Fi setup at startup.
+        if args.initial_launcher:
+            click(340,725)  # Previous preview: do not show Wi-Fi setup at startup.
+        else:
+            before_checkbox=Image.open(io.BytesIO(request('/frame.png'))).convert('RGB').crop((84,709,116,741))
+            subprocess.run(['node',str(Path(__file__).with_name('test_touch_browser.mjs')),chrome,str(args.directory)],check=True,timeout=50)
+            after_checkbox=Image.open(io.BytesIO(fresh_frame(frame))).convert('RGB').crop((84,709,116,741))
+            assert sum(min(p)<100 for p in after_checkbox.getdata())>sum(min(p)<100 for p in before_checkbox.getdata())+10, 'real browser touch did not check the native Engine control'
+            print('PASS real touchscreen input changed the original Engine checkbox',flush=True)
         before_next=fresh_frame(frame)
         frame=json.loads(request('/api/status'))['frame']['frame']
         click(890 if args.initial_launcher else 1130,68)  # Enter the real library/onboarding UI.
@@ -177,6 +184,8 @@ def main():
         else:
             raise RuntimeError('original Engine did not return after a full VM restart')
         restored=json.loads(request('/api/feedback',{'note':'second VM boot'}))
+        assert restored['frame'].get('readbackMs') is not None and restored['frame'].get('encodeMs') is not None
+        print('Preview frame: readback={} ms, x86 encoding={} ms, age={} ms'.format(restored['frame']['readbackMs'],restored['frame']['encodeMs'],restored['frame'].get('ageMs','unknown')),flush=True)
         assert restored['dspProfiles']==report['dspProfiles'], 'VM settings changed across reboot/update'
         if args.initial_launcher:
             assert restored['sourceCommit']!=report['sourceCommit'], 'the old source is still running after update'
