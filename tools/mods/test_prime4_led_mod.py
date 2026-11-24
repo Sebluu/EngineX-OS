@@ -44,5 +44,24 @@ class Prime4LEDBuilder(unittest.TestCase):
         self.assertIn("device.sendSimpleColor(6, 6, ledValue)", result)
         self.assertIn("else { 1 }", result)
 
+    def test_sweep_fx_preserves_selection_and_drops_only_flashing(self):
+        raw = b'''Item {
+    id: module
+    OutputAssignment {
+        id: sweepFxSelectLED
+        readonly property int ledValue: {
+            if (flashOnActive) { assigned && globalConfig.flashState ? 127 : 1 }
+            else { assigned ? 127 : 1 }
+        }
+        function send() { device.sendSimpleColor(module.midiChannel, model.note, ledValue) }
+    }
+}
+'''
+        with patch.dict(led.HASHES, {"SweepFxSelect.qml": hashlib.sha256(raw).hexdigest()}):
+            result = led.transform("SweepFxSelect.qml", raw).decode()
+        self.assertIn("if (flashOnActive && !module.scPrime4SteadyLEDs)", result)
+        self.assertIn("else { assigned ? 127 : 1 }", result)
+        self.assertIn("device.sendSimpleColor(module.midiChannel, model.note, ledValue)", result)
+
 if __name__ == "__main__":
     unittest.main()

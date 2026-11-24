@@ -16,9 +16,11 @@ SCOPE = "PRIME 4 Controller Assignment"
 HASHES = {
     "PlayCue.qml": "1e0739b6528ed22673da49e66235141292362d521220479fa2b8954097161952",
     "DJFxActivate.qml": "9044981ebc82c6e52772ea1b75e654d0c4415eda377441c27f769d4bd784b4da",
+    "SweepFxSelect.qml": "e5f0b8779be8a681e9bca6b5cc2c8de50e089d2e1441290da650fbbf1da11b03",
 }
 GUARD = '    readonly property bool scPrime4SteadyLEDs: typeof assignment !== "undefined" && assignment !== null && assignment.objectName === "PRIME 4 Controller Assignment"\n'
 PLAY_MARKER = 'objectName: "Play LED Deck%1".arg(deckConfig.name)'
+SWEEP_MARKER = "id: sweepFxSelectLED"
 FX_MARKER = 'objectName: "FX Enable LED %1".arg(nameSuffix).trim()'
 
 def verify(raw, digest, label):
@@ -61,6 +63,13 @@ def transform(name, raw):
         if text.count(before) != 1:
             raise ValueError("FX LED anchor changed")
         text = text.replace(before, "fxOn && (module.scPrime4SteadyLEDs || !module.flashOnActive || globalConfig.flashStateFast)", 1)
+    elif name == "SweepFxSelect.qml":
+        start, end = binding_span(text, SWEEP_MARKER)
+        body = text[start:end]
+        if body.count("if (flashOnActive)") != 1:
+            raise ValueError("Sweep FX LED anchor changed")
+        body = body.replace("if (flashOnActive)", "if (flashOnActive && !module.scPrime4SteadyLEDs)", 1)
+        text = text[:start] + body + text[end:]
     else:
         raise ValueError("unknown LED module")
     return text.encode("utf-8")
@@ -86,7 +95,7 @@ def build(rootfs, qrc, destination):
         id="prime4-steady-leds", name="PRIME 4 Steady LEDs", version="0.1.0",
         author="Sebluu", category="interface",
         homepage="https://github.com/Sebluu/EngineX-OS",
-        description="Experimental original PRIME 4 / JC11, Engine OS 5.3.0 only. Steady active DJ-FX LEDs; PLAY off while paused, ended or empty. Engine UI restart required after enable/disable.",
+        description="Experimental original PRIME 4 / JC11, Engine OS 5.3.0 only. Steady DJ-FX and Sweep-FX LEDs; PLAY off while paused, ended or empty. Engine UI restart required after enable/disable.",
         qmlFiles={name: PREFIX + name for name in HASHES},
     )
     data["mod.json"] = (json.dumps(manifest, indent=2) + "\n").encode()

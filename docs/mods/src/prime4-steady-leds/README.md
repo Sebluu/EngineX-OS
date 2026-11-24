@@ -5,10 +5,10 @@ resources. No DSP core, helper binary, script, firmware edit, MIDI-note rewrite,
 MCU update or system service is needed.
 
 The official JC11 assignment identifies itself as "PRIME 4 Controller
-Assignment". The two shared QML modules check that exact creation context;
+Assignment". The three shared QML modules check that exact creation context;
 other assignment contexts retain their original LED expressions.
 
-- DJ-FX ON LEDs stay continuously on while the corresponding FX is active.
+- DJ-FX ON LEDs and Sweep-FX selection LEDs stay continuously on while the corresponding FX is active.
   Inactive LEDs retain the vendor's inactive state.
 - Simple PLAY LEDs are on only while the deck or playlist deck is playing.
   Pause, end and empty decks are off. Bluetooth follows its own play state;
