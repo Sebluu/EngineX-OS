@@ -1,0 +1,24 @@
+name: Experimental output DSP tests
+on:
+  push:
+    branches: [test/all-features]
+    paths:
+      - 'tools/ui-mod/**'
+      - 'pkg/webui/output_dsp.go'
+      - '.github/workflows/output-dsp-experimental.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  dsp:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Standalone DSP signal tests
+        run: |
+          cc -std=c11 -O2 -Wall -Wextra -Werror tools/ui-mod/test_output_dsp.c -lm -o /tmp/test_od
+          /tmp/test_od
+          cc -std=c11 -O1 -g -fsanitize=address,undefined tools/ui-mod/test_output_dsp.c -lm -o /tmp/test_od_san
+          /tmp/test_od_san
+      - name: Python syntax
+        run: python3 -m py_compile tools/ui-mod/build_packs.py tools/ui-mod/output_dsp_ui.py
