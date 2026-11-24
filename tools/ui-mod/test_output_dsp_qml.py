@@ -67,7 +67,7 @@ ApplicationWindow {
         with patch.object(output_dsp_ui, 'feature', return_value=True):
             output_dsp_ui.add_output_dsp(pack, base, 'Skin/')
         source = pack['Skin/EmbeddedMain.qml']
-        old_url='file:///data/enginex/ui/active/EngineXMods/'
+        old_url='file:///data/enginex/ui/mods-overlay/EngineXMods/'
         polling='running: root.scBoard === "JC11"; triggeredOnStart: true'
         assert source.count(old_url) == 1 and source.count(polling) == 1
         source=source.replace(old_url,base.as_uri()+'/').replace(polling,'running: false; triggeredOnStart: false')
