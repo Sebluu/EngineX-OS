@@ -33,7 +33,7 @@ jobs:
           sudo dpkg --add-architecture armhf
           printf '%s\n' 'Types: deb' 'URIs: https://ports.ubuntu.com/ubuntu-ports' 'Suites: noble noble-updates noble-security' 'Components: main universe' 'Architectures: armhf' 'Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg' | sudo tee /etc/apt/sources.list.d/preview-armhf.sources > /dev/null
           sudo apt-get -o Acquire::Retries=1 -o Acquire::http::Timeout=20 update
-          sudo apt-get install -y --no-install-recommends g++-arm-linux-gnueabihf libc6-dev-armhf-cross qemu-user-static binfmt-support e2fsprogs zstd python3-pil iproute2
+          sudo apt-get install -y --no-install-recommends g++-arm-linux-gnueabihf libc6-dev-armhf-cross qt6-base-dev-tools qemu-user-static binfmt-support e2fsprogs zstd python3-pil iproute2
           mkdir "$RUNNER_TEMP/desktop-preview/qt-sdk"
           cd "$RUNNER_TEMP/desktop-preview/qt-sdk"
           apt-get download qt6-base-dev:armhf qt6-declarative-dev:armhf
@@ -44,7 +44,8 @@ jobs:
         run: |
           set -euo pipefail
           sdk="$RUNNER_TEMP/desktop-preview/qt-sdk/usr/include/arm-linux-gnueabihf/qt6"
-          arm-linux-gnueabihf-g++ -std=c++17 -O2 -Wall -Wextra -Werror -shared -fPIC -pthread -I"$sdk" -I"$sdk/QtCore" -I"$sdk/QtGui" -I"$sdk/QtQuick" -I"$sdk/QtQml" -o "$RUNNER_TEMP/desktop-preview/bridge.so" tools/preview/bridge.cpp
+          /usr/lib/qt6/libexec/moc -I"$sdk" -I"$sdk/QtCore" -I"$sdk/QtGui" tools/preview/bridge.cpp -o "$RUNNER_TEMP/desktop-preview/bridge.moc"
+          arm-linux-gnueabihf-g++ -I"$RUNNER_TEMP/desktop-preview" -std=c++17 -O2 -Wall -Wextra -Werror -shared -fPIC -pthread -I"$sdk" -I"$sdk/QtCore" -I"$sdk/QtGui" -I"$sdk/QtQuick" -I"$sdk/QtQml" -o "$RUNNER_TEMP/desktop-preview/bridge.so" tools/preview/bridge.cpp
           bash -n tools/preview/sandbox.sh
           python3 -m py_compile tools/preview/test_live_bridge.py
       - name: Extract and run actual ARM Engine with synthetic input target

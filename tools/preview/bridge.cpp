@@ -1,6 +1,7 @@
 // Desktop preview only. This library is never included in an EngineX image or Mod.
 #include <QCoreApplication>
 #include <QGuiApplication>
+#include <QGenericPlugin>
 #include <QImage>
 #include <QKeyEvent>
 #include <QMouseEvent>
@@ -13,7 +14,6 @@
 #include <cstdlib>
 #include <cstring>
 #include <fcntl.h>
-#include <pthread.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/un.h>
@@ -112,22 +112,21 @@ void start() {
     fprintf(stderr, "PREVIEW_BRIDGE_READY Qt=%s\n", qVersion());
 }
 
-void *awaitApplication(void *) {
-    for (int n = 0; n < 1800; ++n) {
-        if (auto *app = QCoreApplication::instance()) {
-            QTimer::singleShot(0, app, start);
-            return nullptr;
-        }
-        usleep(100000);
-    }
-    return nullptr;
 }
 
-__attribute__((constructor)) void initialize() {
-    const char *enabled = getenv("ENGINEX_DESKTOP_PREVIEW");
-    if (!enabled || strcmp(enabled, "1") || access("/run/enginex-desktop-preview", F_OK) ||
-        strncmp(qVersion(), "6.", 2)) return;
-    pthread_t thread;
-    if (!pthread_create(&thread, nullptr, awaitApplication, nullptr)) pthread_detach(thread);
-}
-}
+// Loaded by Qt after its libraries are present. It must not be in LD_PRELOAD:
+// Engine's non-Qt subprocesses (including lscpu) inherit that variable.
+class DesktopPreviewPlugin final : public QGenericPlugin {
+    Q_OBJECT
+    Q_PLUGIN_METADATA(IID QGenericPluginFactoryInterface_iid FILE "plugin.json")
+public:
+    QObject *create(const QString &name, const QString &) override {
+        const char *enabled = getenv("ENGINEX_DESKTOP_PREVIEW");
+        if (name != QStringLiteral("enginexpreview") || !enabled || strcmp(enabled, "1") ||
+            access("/run/enginex-desktop-preview", F_OK) || strncmp(qVersion(), "6.", 2)) return nullptr;
+        QTimer::singleShot(0, QCoreApplication::instance(), start);
+        return new QObject();
+    }
+};
+
+#include "bridge.moc"

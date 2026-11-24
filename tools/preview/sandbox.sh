@@ -63,7 +63,8 @@ mount -t tmpfs tmpfs "$root/proc/irq"
 mkdir -p "$root/proc/irq/41"
 echo f > "$root/proc/irq/41/smp_affinity"
 echo 0-3 > "$root/proc/irq/41/smp_affinity_list"
-cp "$work/bridge.so" "$root/tmp/preview/desktop-bridge.so"
+mkdir -p "$root/tmp/preview/plugins/generic"
+cp "$work/bridge.so" "$root/tmp/preview/plugins/generic/libenginexpreview.so"
 if [ "$PREVIEW_MODE" = smoke ]; then
     probe="$work/data/enginex/ui/packs/en/Skins/Common/Items/QmlWarnings.qml"
     mkdir -p "$(dirname "$probe")"
@@ -86,7 +87,8 @@ run /etc/enginex/engine-ui-guard pre >> "$work/prepare.log" 2>&1
 chroot "$root" /usr/bin/env -i PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
     HOME=/tmp/home LD_LIBRARY_PATH=/usr/qt/lib QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software \
     ENGINEX_DESKTOP_PREVIEW=1 MALLOC_ARENA_MAX=1 \
-    LD_PRELOAD=/etc/enginex/libengine-ui-hook.so:/tmp/preview/desktop-bridge.so \
+    QT_PLUGIN_PATH=/tmp/preview/plugins:/usr/lib/plugins QT_QPA_GENERIC_PLUGINS=enginexpreview \
+    LD_PRELOAD=/etc/enginex/libengine-ui-hook.so \
     /usr/Engine/Engine -d0 > "$work/engine.log" 2>&1 &
 engine=$!
 trap 'kill -TERM "$engine" "$backend" 2>/dev/null || true' EXIT
