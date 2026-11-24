@@ -7,7 +7,7 @@ Item {
     signal closed()
     ODC.Popup {
         id: odDialog
-        palette.windowText: "#e3eaf5"
+        palette.windowText: "#e3eaf5"; palette.text: "#e3eaf5"; palette.base: "#0b1219"
         objectName: "outputDSPDialog"
         parent: ODC.Overlay.overlay
         visible: odHost.visible; modal: true; focus: true; padding: 0; z: 100000
