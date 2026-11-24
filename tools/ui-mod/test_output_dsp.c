@@ -1,4 +1,5 @@
 /* cc -O2 -std=c11 -DOD_FEATURE_EQ=1 -DOD_FEATURE_SUB=1 test_output_dsp.c -lm -o /tmp/test_od && /tmp/test_od */
+#define _GNU_SOURCE
 #include "output_dsp.h"
 #include <assert.h>
 #define RATE 48000
@@ -27,5 +28,6 @@ int main(void){
     p.minhz=15;p.maxhz=30;od_prepare(&c,&p,RATE);od_publish(1,&c);tone(40);run(1);assert(amplitude(20)>.008);
     tone(80);run(1);assert(amplitude(40)<.005);
     p.low=p.high=0;od_prepare(&c,&p,RATE);assert(!c.sub);
-    od_poll("/nonexistent",RATE);puts("output DSP tests passed");return 0;
+    od_poll("/nonexistent",RATE,0);puts("output DSP tests passed");return 0;
 }
+

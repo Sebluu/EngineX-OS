@@ -42,7 +42,7 @@
 #endif
 #include "dsp_smooth.h"
 #include "master_limiter.h"
-#include "output_dsp.h"
+#include "output_dsp_control.h"
 static int od_allowed;
 #include "echo_out.h"
 #include "pioneer_master.h"
@@ -510,7 +510,10 @@ static void lim_poll_once(void) {
             if (f) { if (fgets(code, sizeof code, f)) { checked = 1; __atomic_store_n(&od_allowed, !strncmp(code,"JC11",4) && (code[4]==0 || code[4]=='\n'), __ATOMIC_RELEASE); } fclose(f); }
         }
         if (__atomic_load_n(&od_allowed, __ATOMIC_ACQUIRE))
-            od_poll(UI_ROOT "/output-dsp-v1.conf", __atomic_load_n(&master_rate, __ATOMIC_ACQUIRE));
+            {
+            unsigned rate=__atomic_load_n(&master_rate, __ATOMIC_ACQUIRE);
+            od_poll(UI_ROOT "/output-dsp-v1.conf",rate,od_control_poll("/tmp/enginex-output-dsp",rate));
+        }
     }
     fx_selector_poll();
     cfx_poll();
@@ -4679,3 +4682,4 @@ int az01_erase_data_partition(void) {
 
 #define ENGINEX_EXPORT_LEGACY_ALSA
 #include "../legacy_names.h"
+

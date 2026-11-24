@@ -5,6 +5,8 @@
 #include <stdio.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <fcntl.h>
+#include <unistd.h>
 #include "output_dsp_features.h"
 
 enum { OD_PAIRS=4, OD_FILTERS=10 };
@@ -34,6 +36,7 @@ struct od_mail {
     uint32_t words[sizeof(struct od_cfg)/4];
 };
 _Static_assert(sizeof(struct od_cfg)%4==0,"mailbox layout");
+_Static_assert(__atomic_always_lock_free(4,0),"audio mailbox must be lock-free");
 static struct od_mail od_mail[OD_PAIRS];
 static struct od_state od_now[OD_PAIRS],od_old[OD_PAIRS];
 static unsigned od_version[OD_PAIRS],od_fade[OD_PAIRS];
@@ -59,9 +62,10 @@ static struct od_bq od_filter(int type,double hz,double q,double db,unsigned rat
     }
     return (struct od_bq){b0/a0,b1/a0,b2/a0,a1/a0,a2/a0};
 }
+static int od_valid(const struct od_params *p);
 static void od_prepare(struct od_cfg *c,const struct od_params *p,unsigned rate) {
     memset(c,0,sizeof *c); c->rate=rate;
-    if(rate<32000||rate>192000)return;
+    if(rate<32000||rate>192000||!od_valid(p))return;
     int eq_changed=p->hp>=10;
     for(int i=0;i<8;i++)if(p->bands[i][2]!=0)eq_changed=1;
     c->eq=OD_FEATURE_EQ && p->eq_on!=0 && eq_changed;
@@ -163,18 +167,25 @@ static int od_valid(const struct od_params *p){
     for(int b=0;b<8;b++)if(!od_range(p->bands[b][0],20,22000)||!od_range(p->bands[b][1],.3,8)||!od_range(p->bands[b][2],-12,12))return 0;
     return 1;
 }
+#ifndef OD_DSP_ONLY
 /* Called only by the existing 80 ms settings worker. Invalid/missing file disables DSP. */
-static void od_poll(const char *path,unsigned rate) {
-    static unsigned previous_rate;static int have, had_stat;
+static void od_poll(const char *path,unsigned rate,unsigned enabled) {
+    static unsigned previous_rate,previous_enabled;static int have, had_stat;
     static struct stat old_stat;
     static struct od_params previous[OD_PAIRS];
     struct stat st;
     int exists=stat(path,&st)==0;
-    if(have&&previous_rate==rate&&exists==had_stat&&
+    if(have&&previous_rate==rate&&previous_enabled==enabled&&exists==had_stat&&
        (!exists||(old_stat.st_dev==st.st_dev&&old_stat.st_ino==st.st_ino&&old_stat.st_size==st.st_size&&
-        old_stat.st_mtime==st.st_mtime&&old_stat.st_ctime==st.st_ctime)))return;
+        old_stat.st_mtim.tv_sec==st.st_mtim.tv_sec&&old_stat.st_mtim.tv_nsec==st.st_mtim.tv_nsec&&
+        old_stat.st_ctim.tv_sec==st.st_ctim.tv_sec&&old_stat.st_ctim.tv_nsec==st.st_ctim.tv_nsec)))return;
     struct od_params next[OD_PAIRS]={{0}};
-    FILE*f=exists?fopen(path,"r"):NULL;int good=f!=NULL;
+    int fd=exists?open(path,O_RDONLY|O_NOFOLLOW|O_NONBLOCK):-1;
+    struct stat opened;
+    int regular=fd>=0&&fstat(fd,&opened)==0&&S_ISREG(opened.st_mode)&&opened.st_size>0&&opened.st_size<=8192;
+    FILE*f=regular?fdopen(fd,"r"):NULL;
+    if(!f&&fd>=0)close(fd);
+    int good=f!=NULL;
     if(f){
         for(int p=0;p<OD_PAIRS&&good;p++){
             float row[OD_VALUES];for(unsigned j=0;j<OD_VALUES;j++)if(fscanf(f,"%f",&row[j])!=1){good=0;break;}
@@ -187,9 +198,12 @@ static void od_poll(const char *path,unsigned rate) {
     had_stat=exists;
     if(exists)old_stat=st;
     for(int p=0;p<OD_PAIRS;p++) {
+        if(!(enabled&1))next[p].eq_on=0;
+        if(!(enabled&2))next[p].sub_on=0;
         if (have && previous_rate==rate && !memcmp(&next[p],&previous[p],sizeof next[p])) continue;
         struct od_cfg c; od_prepare(&c,&next[p],rate); od_publish(p,&c);
     }
-    memcpy(previous,next,sizeof next);have=1;previous_rate=rate;
+    memcpy(previous,next,sizeof next);have=1;previous_rate=rate;previous_enabled=enabled;
 }
+#endif /* !OD_DSP_ONLY */
 #endif

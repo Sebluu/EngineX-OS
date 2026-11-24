@@ -1,10 +1,18 @@
+import QtQuick 2.12
+import QtQuick.Controls 2.5 as ODC
+import QtQuick.Layouts 1.12 as ODL
+
 Rectangle {
     id: odPanel
-    parent: ODC.Overlay.overlay || uiContainer
-    visible: false; z: 100000; anchors.centerIn: parent
+    visible: true; z: 100000; anchors.centerIn: parent
     width: Math.min(parent.width-32,920); height: Math.min(parent.height-32,580)
     color: "#131b24"; radius: 8
-    property string section: "eq"
+    property string section: "@SECTION@"
+    signal closed()
+    property var pending: null
+    Component.onCompleted: request(null)
+    Component.onDestruction: if(pending)pending.abort()
+    Timer { id: requestTimeout; interval: 3000; onTriggered: {if(odPanel.pending)odPanel.pending.abort();odPanel.pending=null;odPanel.busy=false;odPanel.message="DSP unavailable. Check the enabled Mod and native core."} }
     property bool advanced: false
     property bool busy: false
     property int pair: 0
@@ -15,16 +23,20 @@ Rectangle {
     function request(body) {
         if(busy)return
         busy=true
-        var x=new XMLHttpRequest()
+        var x=new XMLHttpRequest();pending=x;requestTimeout.restart()
         x.open(body?"POST":"GET","http://127.0.0.1:8080/v1/enginex/output-dsp")
         if(body)x.setRequestHeader("Content-Type","application/json")
         x.onreadystatechange=function(){
             if(x.readyState!==4)return
-            busy=false
+            requestTimeout.stop();pending=null;busy=false
             if(x.status!==200){message="DSP request failed: "+x.status;return}
-            profiles=JSON.parse(x.responseText);vals=profiles[pair].slice()
-            root.odSubEnabled=profiles[0][2]===1
-            dirty=false;message="Saved settings"
+            try {
+                var data=JSON.parse(x.responseText), bit=section==="eq"?1:2
+                if(data.version!==1 || !(data.enabled&bit) || !data.profiles || data.profiles.length!==4)throw new Error("Matching native core and enabled Mod required")
+                for(var i=0;i<4;i++){if(data.profiles[i].length!==35)throw new Error("Invalid profile");for(var j=0;j<35;j++)if(typeof data.profiles[i][j]!=="number"||!isFinite(data.profiles[i][j]))throw new Error("Invalid value")}
+                profiles=data.profiles;vals=profiles[pair].slice()
+                dirty=false;message=body?"Saved settings":"Ready"
+            } catch(e) { vals=[];message="DSP unavailable: "+e.message }
         }
         x.send(body?JSON.stringify(body):null)
     }
@@ -63,7 +75,7 @@ Rectangle {
             Item {ODL.Layout.fillWidth:true}
             ODC.Switch {text:"Advanced";checked:odPanel.advanced;onToggled:odPanel.advanced=checked}
             ODC.Button {text:"Apply";enabled:!odPanel.busy&&odPanel.vals.length===35&&odPanel.dirty;onClicked:odPanel.request({section:odPanel.section,pair:odPanel.pair,values:odPanel.vals})}
-            ODC.Button {text:odPanel.dirty?"Discard / close":"Close";enabled:!odPanel.busy;onClicked:odPanel.visible=false}
+            ODC.Button {text:odPanel.dirty?"Discard / close":"Close";onClicked:odPanel.closed()}
         }
         ODL.RowLayout {
             Repeater {
@@ -142,3 +154,4 @@ Rectangle {
         }
     }
 }
+
