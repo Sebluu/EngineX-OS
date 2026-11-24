@@ -3,6 +3,7 @@
 #define _GNU_SOURCE
 #include <dlfcn.h>
 #include <stdlib.h>
+#include <stdio.h>
 #include <string.h>
 #include <unistd.h>
 #include <EGL/egl.h>
@@ -16,6 +17,23 @@ __attribute__((constructor)) static void isolate_preloads(void) {
     // Mesa belongs to this Engine process. Non-Qt child programs keep using
     // the vendor runtime; the already-loaded libraries stay in Engine.
     if (enabled()) unsetenv("LD_PRELOAD");
+}
+
+EGLDisplay eglGetDisplay(EGLNativeDisplayType native) {
+    if (enabled()) {
+        void *vendor = dlopen("/opt/enginex-preview-mesa/usr/lib/arm-linux-gnueabihf/libEGL_mesa.so.0", RTLD_NOW | RTLD_LOCAL);
+        if (!vendor) fprintf(stderr, "PREVIEW_MESA_LOAD %s\n", dlerror());
+        // GLVND 1.7 does not recognize EGL_PLATFORM=surfaceless in its legacy
+        // eglGetDisplay dispatcher. Request Mesa's platform explicitly.
+        typedef EGLDisplay (*platform_fn)(EGLenum, void *, const EGLAttrib *);
+        platform_fn get = (platform_fn)dlsym(RTLD_NEXT, "eglGetPlatformDisplay");
+        EGLDisplay display = get ? get(0x31DD /* EGL_PLATFORM_SURFACELESS_MESA */, NULL, NULL) : EGL_NO_DISPLAY;
+        fprintf(stderr, "PREVIEW_EGL_DISPLAY surfaceless=%d\n", display != EGL_NO_DISPLAY);
+        return display;
+    }
+    typedef EGLDisplay (*display_fn)(EGLNativeDisplayType);
+    display_fn get = (display_fn)dlsym(RTLD_NEXT, "eglGetDisplay");
+    return get ? get(native) : EGL_NO_DISPLAY;
 }
 
 EGLBoolean eglChooseConfig(EGLDisplay display, const EGLint *attributes,

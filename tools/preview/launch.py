@@ -173,7 +173,7 @@ def main():
     archive=subprocess.check_output(['git','archive','--format=tar.gz','HEAD','--',*SOURCE_PATHS],cwd=ROOT)
     if len(archive)>64*1024*1024: parser.exit(1,'Der Vorschau-Quellstand ist unerwartet groß.\n')
     (directory/'user-data').write_text(cloud_config(archive,commit,args.port))
-    (directory/'meta-data').write_text(json.dumps({'instance-id':'enginex-preview-'+commit,'local-hostname':'enginex-preview'}))
+    (directory/'meta-data').write_text(json.dumps({'instance-id':f'enginex-preview-{commit}-p{args.port}','local-hostname':'enginex-preview'}))
     subprocess.run(['cloud-localds',str(directory/'seed.img'),str(directory/'user-data'),str(directory/'meta-data')],check=True)
     pin.write_text(json.dumps(identity))
     command=qemu_command(directory,args.port,args.memory,args.cpus,args.accel)

@@ -12,8 +12,10 @@ The preview is for UI feedback. It does **not** emulate the PRIME 4 hardware,
 bootloader, audio converters, physical controls or LEDs. It cannot certify
 brick resistance, audio quality, hardware timing or a successful device reboot.
 The equalizer and synth use simulated audio capabilities for their controls;
-no audio is produced. The original application uses software rendering, so
-some shader-based icons can be absent and the UI can respond slowly.
+no audio is produced. The original application uses Qt's OpenGL scene graph
+with Mesa rendering on the VM's CPU. This renders custom geometry and shader
+effects which the simpler Qt raster backend omitted. It can respond slowly;
+the host GPU is not passed into the VM.
 
 ## Start on Linux
 
@@ -76,8 +78,19 @@ Use `--directory /some/private/directory` for another instance, `--port 9001`
 for a different loopback port, `--memory 3072` or `--cpus 2` for fewer resources,
 and `--no-browser` to open the URL yourself. Supply the same directory and port
 when using `stop` or `logs`. Do not delete the VM disk while QEMU is running.
-Each VM is pinned to its source commit and browser port. To try a new branch version independently, stop the old VM, update the clone
-and launch with a fresh `--directory`; existing settings remain with the old VM.
+Each VM is pinned to its source commit and browser port. After stopping the VM,
+update its source and reuse its downloaded images and private settings with:
+
+```sh
+git pull --ff-only
+python3 tools/preview/launch.py update
+```
+
+Supply the same `--directory` and `--port` used for the initial start. The
+update rebuilds the preview inside the existing VM; its settings and Mod state
+are retained. The source is verified before the guest service is stopped and
+replaced. Use a fresh `--directory` to keep an independent copy of an older
+preview instead. The ordinary `start` action rejects a changed source pin.
 
 ## Verification scope
 
@@ -85,7 +98,9 @@ The preview workflow builds against public Qt 6 headers, tests browser-server
 boundaries and boots the actual ARM Engine from the pinned copied root. Its
 input smoke test injects an explicitly CI-only QML target into that process and
 requires a captured image plus acknowledgments from real pointer and keyboard
-events. That synthetic target is never included in the interactive preview.
+events. It also requires OpenGL and a custom scene-graph triangle in the actual
+Engine image, so the incomplete raster renderer cannot pass. Those synthetic
+targets are never included in the interactive preview.
 These checks do not replace testing an actual PRIME 4.
 
 The complete Linux VM setup was also exercised from a fresh disk, including

@@ -8,6 +8,28 @@ import sys
 import time
 from urllib.request import Request, urlopen
 
+# Only the disposable CI VM receives this non-default settings fixture. It is
+# written by cloud-init, so subsequent boots/source upgrades must retain it.
+SEEDED_LAUNCHER = r'''
+import importlib.util,json,os,sys
+if os.environ.get('GITHUB_ACTIONS')!='true': raise SystemExit('disposable CI host required')
+path=sys.argv[1]
+spec=importlib.util.spec_from_file_location('preview_launcher_under_test',path)
+module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+original=module.cloud_config
+def seeded(*args,**kwargs):
+    config=json.loads(original(*args,**kwargs).split('\n',1)[1])
+    row=[1,0,1,35,56,25,100,100,-48,12,100,90,.707,0,180,1,0,350,1,0,750,1,0,1500,1,0,3000,1,-3,8000,1,0,19000,.707,0]
+    values=[]
+    for i in range(4):
+        profile=row.copy();profile[28]=-3-i;values.extend(profile)
+    config['write_files'].append({'path':'/var/lib/enginex-preview/work/data/enginex/ui/output-dsp-v1.conf','content':' '.join(map(str,values))+'\n','permissions':'0644'})
+    return '#cloud-config\n'+json.dumps(config)
+module.cloud_config=seeded
+sys.argv=[path,*sys.argv[2:]]
+module.main()
+'''
+
 
 def main():
     parser=argparse.ArgumentParser()
@@ -19,6 +41,7 @@ def main():
     command=[sys.executable,str(Path(__file__).with_name('launch.py')),'--directory',str(args.directory),'--no-browser']
     first_command=command.copy()
     if args.initial_launcher: first_command[1]=str(args.initial_launcher)
+    first_command=[sys.executable,'-c',SEEDED_LAUNCHER,*first_command[1:]]
     process=subprocess.Popen(first_command,stdout=log,stderr=subprocess.STDOUT)
 
     def request(path,body=None):
@@ -65,10 +88,12 @@ def main():
         print('PASS real Chrome browser: frontend JavaScript, local status polling and original Engine image',flush=True)
         report=json.loads(request('/api/feedback',{'note':'isolated VM smoke test'}))
         assert report['uiOnly'] and len(report['sourceCommit'])==40
+        assert [profile[28] for profile in report['dspProfiles']]==[-3,-4,-5,-6], 'non-default VM settings fixture missing'
         for action in ('down','up'):
             request('/api/input',{'kind':'pointer','action':action,'x':890,'y':68,'button':1,'buttons':int(action=='down')})
         # A new plugin instance replaces the UNIX socket and produces fresh frames.
         time.sleep(2)
+        (args.directory/'navigation-frame.png').write_bytes(request('/frame.png'))
         before=json.loads(request('/api/status'))['frame']['frame']
         request('/api/restart',{})
         deadline=time.monotonic()+180
