@@ -25,9 +25,13 @@ QML-only Mod archives with standard mod.json / qmlFiles: Output Equalizer and
 Subharmonic Synthesizer. They contain no firmware, executable, lifecycle script,
 dependency installer or service. They stay out of the official registry until
 release validation is complete; installing one on stock EngineX cannot add DSP.
-Settings → Mixer → Output Equalizer (or Subharmonic Synthesizer) launches the enabled Mod's panel lazily. A panel failure is
-confined to the optional Loader instead of importing Controls into the startup
-UI. No speculative Touch FX shortcut is generated.
+Settings → Mixer → Output Equalizer (or Subharmonic Synthesizer) launches the
+enabled Mod's panel lazily. A panel failure is confined to the optional Loader.
+No new Controls import is added to the startup UI. Panels load from the SDK's
+ui/mods-overlay/EngineXMods directory; ui/active is optional and is not assumed
+to exist. The panels are proper modal popups. Real Qt pointer tests verify
+closing them above Settings, then using Settings and the main view again.
+No speculative Touch FX shortcut is generated.
 
 A third, independent QML-only prime4-steady-leds Mod controls PLAY, DJ-FX and Sweep-FX indicators without the DSP core or a firmware edit. Its builder verifies original module hashes and a uniquely JC11 assignment context. See docs/prime4-steady-button-leds.md for validation and restart limits.
 
@@ -77,10 +81,10 @@ enable, persisted enable, disable, quarantine and uninstall checks.
 
 Confirmed source checks:
 
-- [Integrated C/Go/ARM/component suite](https://github.com/Sebluu/EngineX-OS/actions/runs/45311793487).
-- [DSP core topic](https://github.com/Sebluu/EngineX-OS/actions/runs/45308475144),
-  [EQ topic](https://github.com/Sebluu/EngineX-OS/actions/runs/45308483012),
-  [SUB topic](https://github.com/Sebluu/EngineX-OS/actions/runs/45308491168).
+- [Integrated C/Go/ARM/component suite](https://github.com/Sebluu/EngineX-OS/actions/runs/45316957624).
+- [DSP core topic](https://github.com/Sebluu/EngineX-OS/actions/runs/45316960704),
+  [EQ topic](https://github.com/Sebluu/EngineX-OS/actions/runs/45316954354),
+  [SUB topic](https://github.com/Sebluu/EngineX-OS/actions/runs/45316963646).
 - [Official QRC, 28 LED states, creation context, loader and matching packs](https://github.com/Sebluu/EngineX-OS/actions/runs/45311893936).
 
 An additional integration-only workflow,
@@ -89,18 +93,36 @@ published JC11 5.3.0.5-r1 baseline. It compiles this branch's suite/hook/UI pack
 seeds all three Mods through the real loader, and adds assertions to a private
 copy of the unchanged upstream release gate. Its sandbox revision is r2
 without changing the project version or creating a Release. Images, vendor
-files, test signing keys and archives are never uploaded. This gate is **not
-yet certified**; its final result must be reviewed separately.
+files, test signing keys and archives are never uploaded.
+
+[The complete isolated JC11 gate passed: 186 PASS, 0 FAIL](https://github.com/Sebluu/EngineX-OS/actions/runs/45318348421),
+using source 113046766358a4715d3e4b6e7a3ac3078ea38ead. It verifies the
+published baseline's update path, native Engine/Qt code under QEMU, all three
+enabled Mods and exact generated overlays, non-flat/enabled DSP profiles,
+populated synthetic music library, an abrupt namespace SIGKILL, second Engine
+startup on the same data, dirty-cache purge and UI-ready without fallback.
+Both DSP panels instantiate inside Engine before and after that restart.
+Unsigned releases, bad signatures, edited manifests, tampered images and
+signatures for another revision are refused. Valid signed staging is checked
+without an eMMC device. The host clock remains unchanged.
+
+This is an isolated userspace startup test on the actual rootfs, not a physical
+power-on, kernel boot, real eMMC update or ARMv7 real-time certificate. The gate
+adds assertions to a private copy; no existing upstream assertion is removed.
+Its panel checks await actual render readiness on both boots.
 
 Still mandatory before any deck installation:
 
 - Native armhf callback/budget tests on the project's supported build host,
   including the PRIME 4's actual CPU margin.
-- Verify Settings placement and physical controller/mixer assignments;
-  the successful QRC build alone does not certify native Engine startup.
-- Isolated rootfs release gates on populated /data, repeated restarts,
-  interrupted install/upgrade, quarantine, stock fallback and uninstall.
-  Unit fixtures do not certify these scenarios.
+- Native execution of the required release gates on the supported build host;
+  the completed QEMU gate supplies functional evidence only.
+- Actual controller/mixer assignments, Settings placement and required
+  OpenGL/hardware screenshots.
+- Interruption during Mod install/upgrade itself, forced startup hang with
+  stock handback, and quarantine/uninstall followed by restart on the exact
+  rootfs. Existing mocked guard and loader tests are green; the completed
+  power-cut test is a healthy Engine run killed after UI-ready.
 - Physical routing, split cue, Cue/Master, Zone, Computer Mode, external inputs,
   repeated changes and audio continuity.
 
@@ -110,4 +132,5 @@ or physical device reboot is authorized or performed by these tests. Updater
 verification, where exercised, is confined to the isolated rootfs gate.
 Passing CI cannot guarantee that an installed experimental build cannot brick
 or fail to boot. Do not distribute these source branches as installable
-firmware or publish the Mods as compatible with stock EngineX.
+firmware. The DSP Mods require the matching native core; the independent LED
+Mod still awaits physical controller validation before publication.
