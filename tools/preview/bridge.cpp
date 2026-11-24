@@ -45,6 +45,7 @@ bool touching = false;
 QPointer<QQuickWindow> selected;
 QString expectedPanel;
 bool panelReported = false;
+bool panelDiagnosed = false;
 
 // The firmware uses custom scene-graph geometry. Qt's raster backend silently
 // omits those nodes. CI must exercise one, in the real Engine scene, to catch it.
@@ -172,7 +173,7 @@ void dispatch() {
             for (QObject *object : uiObjects(target)) {
                 if (object->metaObject()->indexOfMethod("odOpen(QVariant)") < 0) continue;
                 fprintf(stderr, "PREVIEW_MOD_HOST board=%s mods=%d\n", qPrintable(object->property("scBoard").toString()), object->property("odMods").toInt());
-                expectedPanel = section; panelReported = false;
+                expectedPanel = section; panelReported = false; panelDiagnosed = false;
                 QMetaObject::invokeMethod(object, "odOpen", Qt::DirectConnection, Q_ARG(QVariant, QVariant(section)));
                 break;
             }
@@ -206,9 +207,32 @@ void requestFrame() {
             auto *content = popup->property("contentItem").value<QQuickItem *>();
             if (!popup->property("visible").toBool() || !content || content->property("section").toString() != expectedPanel) continue;
             if (content->property("message").toString() == QStringLiteral("Ready")) {
-                fprintf(stderr, "PREVIEW_MOD_PANEL_READY section=%s\n", qPrintable(expectedPanel));
-                panelReported = true;
-                break;
+                bool first = false, second = false;
+                for (QQuickItem *item : content->findChildren<QQuickItem *>()) {
+                    const QString text = item->property("text").toString();
+                    const QString kind = QString::fromLatin1(item->metaObject()->className());
+                    const bool sized = item->isVisible() && item->width() > 1 && item->height() > 1;
+                    if (expectedPanel == QStringLiteral("sub")) {
+                        if (text == QStringLiteral("Strength %")) first = sized;
+                        if (text == QStringLiteral("Maximum sub frequency Hz")) second = sized;
+                    } else {
+                        if (text == QStringLiteral("3000 Hz")) first = sized;
+                        if (text.startsWith(QStringLiteral("Highpass"))) second = sized;
+                    }
+                    if (!panelDiagnosed && (text.contains(QStringLiteral("Strength")) || text.contains(QStringLiteral("Maximum")) ||
+                        kind.contains(QStringLiteral("Layout")) || kind.contains(QStringLiteral("Repeater")))) {
+                        const QPointF point = item->mapToScene(QPointF());
+                        fprintf(stderr, "PREVIEW_MOD_LAYOUT kind=%s text=%s visible=%d xy=%.1f,%.1f size=%.1f,%.1f implicit=%.1f,%.1f count=%d\n",
+                            qPrintable(kind), qPrintable(text), item->isVisible(), point.x(), point.y(), item->width(), item->height(),
+                            item->implicitWidth(), item->implicitHeight(), item->property("count").toInt());
+                    }
+                }
+                panelDiagnosed = true;
+                if (first && second) {
+                    fprintf(stderr, "PREVIEW_MOD_PANEL_READY section=%s\n", qPrintable(expectedPanel));
+                    panelReported = true;
+                    break;
+                }
             }
         }
     }
