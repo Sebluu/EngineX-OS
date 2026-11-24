@@ -67,6 +67,7 @@ try{
   // in a desktop headless session, leaving a false failure unrelated to the UI.
   await touch('touchStart',200,550);await delay(50);
   for(let i=1;i<=8;i++){await touch('touchMove',200,550-i*20);await delay(35);}
+  await delay(150); // Let the finger settle so the next control test has no fling.
   await touch('touchEnd');await delay(400);
   const outsideAfter=await evaluate('window.scrollY');
   assert.ok(Math.abs(outsideAfter-outsideBefore)>20,`Touch outside Engine did not scroll the blank page: ${outsideBefore} → ${outsideAfter}; ${outsideTarget}; events=${await evaluate('JSON.stringify(touchTrace)')}`);

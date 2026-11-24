@@ -143,6 +143,7 @@ def main():
         else:
             before_checkbox=Image.open(io.BytesIO(request('/frame.png'))).convert('RGB').crop((84,709,116,741))
             subprocess.run(['node',str(Path(__file__).with_name('test_touch_browser.mjs')),chrome,str(args.directory)],check=True,timeout=50)
+            frame=json.loads(request('/api/status'))['frame']['frame']
             after_checkbox=Image.open(io.BytesIO(fresh_frame(frame))).convert('RGB').crop((84,709,116,741))
             assert sum(min(p)<100 for p in after_checkbox.getdata())>sum(min(p)<100 for p in before_checkbox.getdata())+10, 'real browser touch did not check the native Engine control'
             print('PASS real touchscreen input changed the original Engine checkbox',flush=True)
