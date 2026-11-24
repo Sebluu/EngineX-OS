@@ -18,6 +18,9 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <unistd.h>
 
 static uint64_t now_ns(void)
 {
@@ -49,6 +52,8 @@ static void report(const char *path, unsigned frames, unsigned ms,
 #include "echo_out.h"
 #include "pioneer_master.h"
 #include "pioneer_fx.h"
+#define OD_DSP_ONLY
+#include "output_dsp.h"
 
 /* Match the hook's maxima for the optional master effects. Large buffers and
  * delay state live in BSS, never in an audio-thread stack frame. */
@@ -127,8 +132,8 @@ int main(void)
     for (unsigned n = 0; n < sizeof sizes / sizeof *sizes; ++n) {
         unsigned frames = sizes[n];
         uint64_t budget = (uint64_t)frames * 1000000000u / 96000u;
-        for (unsigned path = 0; path < 3; ++path) {
-            for (unsigned ms_case = 0; ms_case < (path ? 3u : 1u); ++ms_case) {
+        for (unsigned path = 0; path < 4; ++path) {
+            for (unsigned ms_case = 0; ms_case < ((path==1 || path==2) ? 3u : 1u); ++ms_case) {
                 unsigned ms = ms_case == 0 ? 0 : (ms_case == 1 ? 10 : 4000);
                 uint64_t maximum = 0, best[BLOCKS];
                 unsigned misses = 0;
@@ -149,9 +154,17 @@ int main(void)
                         sc_pfx_instance_prepare(&selector);
                         sc_ms_prepare(&selector.ms);
                     }
+                    if(path==3) {
+                        struct od_params od={0};struct od_cfg cfg;
+                        od.eq_on=od.sub_on=1;od.hp=35;od.wet=25;od.maxhz=56;od.minhz=25;od.low=od.high=100;od.threshold=-48;od.attack=12;od.release=100;
+                        for(unsigned b=0;b<8;b++){od.bands[b][0]=90*(b+1);od.bands[b][1]=.707f;od.bands[b][2]=1+(float)(block%8);}
+                        od_prepare(&cfg,&od,96000);
+                        for(unsigned p=0;p<PAIRS;p++)od_publish(p,&cfg);
+                    }
                     uint64_t start = now_ns();
                     if (path == 0) guards(frames);
                     else if (path == 1) master_block(frames, mode, ms);
+                    else if(path==3) {for(unsigned p=0;p<PAIRS;p++)od_process(p,samples[p][0],samples[p][1],frames,96000);}
                     else (void)sc_pfx_process(&selector, samples[0][0], samples[0][1],
                                              frames, mode, 0.5f, 0.5f, 1.0f);
                     uint64_t elapsed = now_ns() - start;
@@ -167,7 +180,7 @@ int main(void)
                     if (best[block] > maximum) maximum = best[block];
                     if (best[block] > budget) ++misses;
                 }
-                report(path == 0 ? "guards" : (path == 1 ? "master-4-pairs" : "selector-1-pair"),
+                report(path == 0 ? "guards" : (path == 1 ? "master-4-pairs" : path==3 ? "output-dsp-4-pairs" : "selector-1-pair"),
                        frames, ms, budget, maximum, misses);
                 failures += misses;
             }
@@ -175,3 +188,4 @@ int main(void)
     }
     return failures ? EXIT_FAILURE : EXIT_SUCCESS;
 }
+

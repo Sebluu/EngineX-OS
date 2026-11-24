@@ -4,6 +4,9 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <unistd.h>
 #include "output_dsp_features.h"
 
 enum { OD_PAIRS=4, OD_FILTERS=10 };
@@ -19,6 +22,7 @@ _Static_assert(sizeof(struct od_params)==OD_VALUES*sizeof(float),"config layout"
 struct od_cfg {
     unsigned rate, eq, sub;
     float wet, level[2], threshold, attack, release;
+    unsigned min_period[2], max_period[2];
     struct od_bq filters[OD_FILTERS], source[2][2], hp[2], lp[2];
 };
 struct od_state {
@@ -32,6 +36,7 @@ struct od_mail {
     uint32_t words[sizeof(struct od_cfg)/4];
 };
 _Static_assert(sizeof(struct od_cfg)%4==0,"mailbox layout");
+_Static_assert(__atomic_always_lock_free(4,0),"audio mailbox must be lock-free");
 static struct od_mail od_mail[OD_PAIRS];
 static struct od_state od_now[OD_PAIRS],od_old[OD_PAIRS];
 static unsigned od_version[OD_PAIRS],od_fade[OD_PAIRS];
@@ -57,11 +62,15 @@ static struct od_bq od_filter(int type,double hz,double q,double db,unsigned rat
     }
     return (struct od_bq){b0/a0,b1/a0,b2/a0,a1/a0,a2/a0};
 }
+static int od_valid(const struct od_params *p);
 static void od_prepare(struct od_cfg *c,const struct od_params *p,unsigned rate) {
     memset(c,0,sizeof *c); c->rate=rate;
-    if(rate<32000||rate>192000)return;
-    c->eq=OD_FEATURE_EQ && p->eq_on!=0;
-    c->sub=OD_FEATURE_SUB && p->sub_on!=0 && p->wet>0;
+    if(rate<32000||rate>192000||!od_valid(p))return;
+    int eq_changed=p->hp>=10;
+    for(int i=0;i<8;i++)if(p->bands[i][2]!=0)eq_changed=1;
+    c->eq=OD_FEATURE_EQ && p->eq_on!=0 && eq_changed;
+    c->sub=OD_FEATURE_SUB && p->sub_on!=0 && p->wet>0 && (p->low>0 || p->high>0);
+    if (!c->eq && !c->sub) return;
     c->wet=p->wet*.01f;c->level[0]=p->low*.01f;c->level[1]=p->high*.01f;
     c->threshold=pow(10,p->threshold/20);
     c->attack=1-exp(-1/(rate*p->attack*.001));c->release=1-exp(-1/(rate*p->release*.001));
@@ -71,8 +80,10 @@ static void od_prepare(struct od_cfg *c,const struct od_params *p,unsigned rate)
         if(p->hp>=10){c->filters[8]=od_filter(3,p->hp,.541196,0,rate);c->filters[9]=od_filter(3,p->hp,1.306563,0,rate);}
     }
     if(c->sub)for(int j=0;j<2;j++){
-        double lo=fmax(j?72:48,p->minhz*2),hi=fmin(j?160:72,p->maxhz*2);
+        double lo=fmax(j?72:30,p->minhz*2),hi=fmin(j?160:72,p->maxhz*2);
         if(hi<=lo){c->level[j]=0;continue;}
+        c->min_period[j]=(unsigned)(rate/hi);
+        c->max_period[j]=(unsigned)(rate/lo)+1;
         c->source[j][0]=od_filter(3,lo,.707,0,rate);c->source[j][1]=od_filter(4,hi,.707,0,rate);
         c->hp[j]=od_filter(3,p->minhz,.707,0,rate);c->lp[j]=od_filter(4,p->maxhz,.707,0,rate);
     }
@@ -109,11 +120,11 @@ static inline void od_sample(struct od_state *s,float *l,float *r) {
             if(s->age[j]<c->rate)s->age[j]++;
             if(v>=0&&s->previous[j]<0){
                 unsigned n=s->age[j];s->age[j]=0;
-                if(n>=c->rate/180&&n<=c->rate/40&&s->envelope[j]>c->threshold)s->sign[j]=s->sign[j]>0?-1:1;
+                if(n>=c->min_period[j]&&n<=c->max_period[j]&&s->envelope[j]>c->threshold)s->sign[j]=s->sign[j]>0?-1:1;
                 else s->sign[j]=0;
             }
             s->previous[j]=v;
-            if(s->age[j]>c->rate/35||s->envelope[j]<c->threshold)s->sign[j]=0;
+            if(s->age[j]>c->max_period[j]+1||s->envelope[j]<c->threshold)s->sign[j]=0;
             float raw=s->sign[j]*s->envelope[j];
             sub+=od_tick(&c->lp[j],&s->lp[j],od_tick(&c->hp[j],&s->hp[j],raw))*c->level[j];
         }
@@ -156,12 +167,25 @@ static int od_valid(const struct od_params *p){
     for(int b=0;b<8;b++)if(!od_range(p->bands[b][0],20,22000)||!od_range(p->bands[b][1],.3,8)||!od_range(p->bands[b][2],-12,12))return 0;
     return 1;
 }
+#ifndef OD_DSP_ONLY
 /* Called only by the existing 80 ms settings worker. Invalid/missing file disables DSP. */
-static void od_poll(const char *path,unsigned rate) {
-    static unsigned previous_rate;static int have;
+static void od_poll(const char *path,unsigned rate,unsigned enabled) {
+    static unsigned previous_rate,previous_enabled;static int have, had_stat;
+    static struct stat old_stat;
     static struct od_params previous[OD_PAIRS];
+    struct stat st;
+    int exists=stat(path,&st)==0;
+    if(have&&previous_rate==rate&&previous_enabled==enabled&&exists==had_stat&&
+       (!exists||(old_stat.st_dev==st.st_dev&&old_stat.st_ino==st.st_ino&&old_stat.st_size==st.st_size&&
+        old_stat.st_mtim.tv_sec==st.st_mtim.tv_sec&&old_stat.st_mtim.tv_nsec==st.st_mtim.tv_nsec&&
+        old_stat.st_ctim.tv_sec==st.st_ctim.tv_sec&&old_stat.st_ctim.tv_nsec==st.st_ctim.tv_nsec)))return;
     struct od_params next[OD_PAIRS]={{0}};
-    FILE*f=fopen(path,"r");int good=f!=NULL;
+    int fd=exists?open(path,O_RDONLY|O_NOFOLLOW|O_NONBLOCK):-1;
+    struct stat opened;
+    int regular=fd>=0&&fstat(fd,&opened)==0&&S_ISREG(opened.st_mode)&&opened.st_size>0&&opened.st_size<=8192;
+    FILE*f=regular?fdopen(fd,"r"):NULL;
+    if(!f&&fd>=0)close(fd);
+    int good=f!=NULL;
     if(f){
         for(int p=0;p<OD_PAIRS&&good;p++){
             float row[OD_VALUES];for(unsigned j=0;j<OD_VALUES;j++)if(fscanf(f,"%f",&row[j])!=1){good=0;break;}
@@ -171,8 +195,15 @@ static void od_poll(const char *path,unsigned rate) {
         fclose(f);
     }
     if(!good){memset(next,0,sizeof next);for(int p=0;p<OD_PAIRS;p++){next[p].attack=12;next[p].release=100;}}
-    if(have&&previous_rate==rate&&!memcmp(next,previous,sizeof next))return;
-    memcpy(previous,next,sizeof next);have=1;previous_rate=rate;
-    for(int p=0;p<OD_PAIRS;p++){struct od_cfg c;od_prepare(&c,&next[p],rate);od_publish(p,&c);}
+    had_stat=exists;
+    if(exists)old_stat=st;
+    for(int p=0;p<OD_PAIRS;p++) {
+        if(!(enabled&1))next[p].eq_on=0;
+        if(!(enabled&2))next[p].sub_on=0;
+        if (have && previous_rate==rate && !memcmp(&next[p],&previous[p],sizeof next[p])) continue;
+        struct od_cfg c; od_prepare(&c,&next[p],rate); od_publish(p,&c);
+    }
+    memcpy(previous,next,sizeof next);have=1;previous_rate=rate;previous_enabled=enabled;
 }
+#endif /* !OD_DSP_ONLY */
 #endif
