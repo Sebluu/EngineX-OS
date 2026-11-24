@@ -34,7 +34,7 @@ class LauncherTests(unittest.TestCase):
         self.assertIn(launch.hashlib.sha256(source).hexdigest(), files['/var/lib/enginex-preview/source.sha256']['content'])
         self.assertNotIn('ssh_authorized_keys', config)
         self.assertFalse(config['ssh_pwauth'])
-        self.assertIn('tools/az01-packer', launch.SOURCE_PATHS)
+        self.assertIn('tools', launch.SOURCE_PATHS)
 
 
 class HTTPTests(unittest.TestCase):

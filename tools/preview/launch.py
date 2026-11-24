@@ -20,7 +20,7 @@ ROOT = Path(__file__).resolve().parents[2]
 BASE_URL = 'https://cloud-images.ubuntu.com/noble/20261017/noble-server-cloudimg-amd64.img'
 BASE_SHA = '04e8f2461a16a44e78a370284471f29616cdd9baf1893df25807b71f985b6c94'
 SOURCE_PATHS = ['go.mod', 'go.sum', 'cmd', 'internal', 'pkg', 'rootfs-overlay',
-                'tools/az01-packer', 'tools/ui-mod', 'tools/mods', 'tools/preview', 'third_party',
+                'tools', 'third_party',
                 'docs/mods/src', 'docs/assets/boot-splash-enginex.png']
 
 def digest(path):
