@@ -2,6 +2,7 @@
 import argparse
 import io
 import json
+import statistics
 from pathlib import Path
 import subprocess
 import shutil
@@ -37,6 +38,7 @@ def main():
     parser=argparse.ArgumentParser()
     parser.add_argument('directory',type=Path)
     parser.add_argument('--initial-launcher',type=Path,help='exercise an existing preview upgrade from an earlier checkout')
+    parser.add_argument('--initial-legacy-layout',action='store_true',help='older offscreen preview reports an 800-pixel logical screen')
     args=parser.parse_args()
     args.directory.mkdir(parents=True,exist_ok=True)
     log=(args.directory/'launcher-test.log').open('w')
@@ -56,7 +58,7 @@ def main():
         if sum(difference)/3<5: return False
         if sum(min(pixel)>180 for pixel in picture.getdata())<1000: return False
         if checkbox:
-            x=340 if args.initial_launcher else 100
+            x=340 if args.initial_legacy_layout else 100
             if sum(min(pixel)>180 for pixel in picture.crop((x-16,709,x+16,741)).getdata())<700: return False
         return True
 
@@ -86,6 +88,16 @@ def main():
             '--dump-dom','http://127.0.0.1:8765'],capture_output=True,text=True,timeout=40)
         if rendered.returncode or '/frame.png?frame=' not in rendered.stdout or 'Lokale Vorschau' not in rendered.stdout:
             raise RuntimeError('the real browser did not execute the preview frontend and load the Engine image')
+
+    def frame_cadence():
+        previous=None;stamps=[];deadline=time.monotonic()+15
+        while len(stamps)<4 and time.monotonic()<deadline:
+            meta=json.loads(request('/api/status')).get('frame',{})
+            current=(meta.get('stream'),meta.get('frame'))
+            if current[1] and current!=previous:
+                stamps.append(time.monotonic());previous=current
+            time.sleep(.05)
+        return round(statistics.median((b-a)*1000 for a,b in zip(stamps,stamps[1:])),1) if len(stamps)>=3 else None
 
     try:
         deadline=time.monotonic()+1200
@@ -119,13 +131,15 @@ def main():
         browser_capture(chrome)
         print('PASS real Chrome browser: frontend JavaScript, local status polling and original Engine image',flush=True)
         report=json.loads(request('/api/feedback',{'note':'isolated VM smoke test'}))
+        before_cadence=frame_cadence()
+        print('Initial displayed frame interval: {} ms'.format(before_cadence),flush=True)
         assert report['uiOnly'] and len(report['sourceCommit'])==40
         assert [profile[28] for profile in report['dspProfiles']]==[-3,-4,-5,-6], 'non-default VM settings fixture missing'
         # The old offscreen platform reports an 800-pixel screen inside a
         # 1280-pixel window. EGLFS now reports the correct full screen size.
         frame=json.loads(request('/api/status'))['frame']['frame']
         if args.initial_launcher:
-            click(340,725)  # Previous preview: do not show Wi-Fi setup at startup.
+            click(340 if args.initial_legacy_layout else 100,725)  # Previous preview: hide initial setup.
         else:
             before_checkbox=Image.open(io.BytesIO(request('/frame.png'))).convert('RGB').crop((84,709,116,741))
             subprocess.run(['node',str(Path(__file__).with_name('test_touch_browser.mjs')),chrome,str(args.directory)],check=True,timeout=50)
@@ -134,11 +148,11 @@ def main():
             print('PASS real touchscreen input changed the original Engine checkbox',flush=True)
         before_next=fresh_frame(frame)
         frame=json.loads(request('/api/status'))['frame']['frame']
-        click(890 if args.initial_launcher else 1130,68)  # Enter the real library/onboarding UI.
+        click(890 if args.initial_legacy_layout else 1130,68)  # Enter the real library/onboarding UI.
         navigated=fresh_frame(frame)
         assert navigated!=before_next, 'the real Wi-Fi Next control did not change the Engine screen'
         frame=json.loads(request('/api/status'))['frame']['frame']
-        click(890 if args.initial_launcher else 1130,68)  # Close Engine DJ Profiles without a login.
+        click(890 if args.initial_legacy_layout else 1130,68)  # Close Engine DJ Profiles without a login.
         library=fresh_frame(frame,count=4)
         assert library!=navigated and ui_ready(library), 'profile setup did not close into the real library/onboarding screen'
         (args.directory/'navigation-frame.png').write_bytes(library)
@@ -184,6 +198,7 @@ def main():
         else:
             raise RuntimeError('original Engine did not return after a full VM restart')
         restored=json.loads(request('/api/feedback',{'note':'second VM boot'}))
+        print('Restored displayed frame interval: {} ms (initially {} ms)'.format(frame_cadence(),before_cadence),flush=True)
         assert restored['frame'].get('readbackMs') is not None and restored['frame'].get('encodeMs') is not None
         print('Preview frame: readback={} ms, x86 encoding={} ms, age={} ms'.format(restored['frame']['readbackMs'],restored['frame']['encodeMs'],restored['frame'].get('ageMs','unknown')),flush=True)
         assert restored['dspProfiles']==report['dspProfiles'], 'VM settings changed across reboot/update'

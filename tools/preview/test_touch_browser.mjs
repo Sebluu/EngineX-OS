@@ -7,6 +7,7 @@ import {join} from 'node:path';
 const [chrome,directory]=process.argv.slice(2);
 const profile=join(directory,'touch-browser');await mkdir(profile,{recursive:true});
 const child=spawn(chrome,['--headless','--no-sandbox','--disable-gpu','--disable-dev-shm-usage',
+  '--window-size=1600,1000',
   '--disable-background-networking','--no-first-run','--remote-debugging-address=127.0.0.1',
   '--remote-debugging-port=0','--user-data-dir='+profile,'about:blank'],{stdio:'ignore'});
 const delay=ms=>new Promise(resolve=>setTimeout(resolve,ms));
@@ -49,9 +50,14 @@ try{
   for(let i=1;i<=5;i++){await touch('touchMove',x,y-i*20);await delay(25);}
   await touch('touchEnd');await delay(200);
   assert.ok(Math.abs(await evaluate('window.scrollY')-r.scroll)<=1,'Touch inside Engine scrolled the browser page');
-  await command('Input.synthesizeScrollGesture',{x:1450,y:250,yDistance:-130,speed:500,gestureSourceType:'touch'});
+  // Use the blank page below the device/feedback controls. A textarea has its
+  // own touch-scrolling behavior and is not a test of surrounding page scroll.
+  await evaluate('window.scrollTo(0,700)');await delay(100);
+  const outsideBefore=await evaluate('window.scrollY');
+  await command('Input.synthesizeScrollGesture',{x:200,y:450,yDistance:-130,speed:500,gestureSourceType:'touch'});
   await delay(200);
-  assert.ok(await evaluate('window.scrollY')>r.scroll+20,'Touch outside Engine can no longer scroll the page');
+  const outsideAfter=await evaluate('window.scrollY');
+  assert.ok(outsideAfter>outsideBefore+20,`Touch outside Engine did not scroll the blank page: ${outsideBefore} → ${outsideAfter}`);
   await evaluate('window.scrollTo(0,0)');
   const box=JSON.parse(await evaluate('JSON.stringify((()=>{const r=document.getElementById("frame").getBoundingClientRect();return {x:r.x,y:r.y,width:r.width,height:r.height}})())'));
   const cx=box.x+box.width*100/1280,cy=box.y+box.height*725/800;
