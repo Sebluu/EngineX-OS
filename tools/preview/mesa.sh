@@ -26,7 +26,7 @@ library_path="$prefix/usr/lib/arm-linux-gnueabihf:$prefix/lib/arm-linux-gnueabih
 while IFS= read -r -d '' library; do
     case "$library" in */ld-linux-armhf.so.3|*/libc.so.6) continue ;; esac
     patchelf --force-rpath --set-rpath "$library_path:\$ORIGIN" "$library"
-done < <(find "$work/root$prefix/usr/lib" -type f -name '*.so*' -print0)
+done < <(find "$work/root$prefix" -type f -path '*/lib/*' -name '*.so*' -print0)
 loader=$(find "$mesa/root" -type f -name ld-linux-armhf.so.3 -print -quit)
 [ -n "$loader" ] || { echo 'Preview Mesa ARM loader missing' >&2; exit 1; }
 # Only this private Engine copy gets the matching loader and transitive runtime

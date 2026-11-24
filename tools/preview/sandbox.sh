@@ -99,8 +99,12 @@ run /etc/enginex/engine-ui-guard pre >> "$work/prepare.log" 2>&1
 start_engine() {
 rm -f "$work/runtime/frame.json" "$work/runtime/frame.png" "$work/runtime/restart.request"
 echo starting > "$work/runtime/engine.state"
+if [ "$PREVIEW_MODE" = smoke ]; then ulimit -c 1048576; fi
 chroot "$root" /usr/bin/env -i PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
-    HOME=/tmp/home QT_QPA_PLATFORM=minimalegl QSG_RHI_BACKEND=opengl QSG_RENDER_LOOP=basic \
+    HOME=/tmp/home QT_QPA_PLATFORM=eglfs QSG_RHI_BACKEND=opengl QSG_RENDER_LOOP=basic \
+    QT_QPA_EGLFS_INTEGRATION=none QT_QPA_EGLFS_FB=/dev/null \
+    QT_QPA_EGLFS_WIDTH=1280 QT_QPA_EGLFS_HEIGHT=800 QT_QPA_EGLFS_DEPTH=32 \
+    QT_QPA_EGLFS_DISABLE_INPUT=1 QT_QPA_EGLFS_HIDECURSOR=1 \
     EGL_PLATFORM=surfaceless LIBGL_ALWAYS_SOFTWARE=1 GALLIUM_DRIVER=llvmpipe LP_NUM_THREADS=2 \
     EGL_LOG_LEVEL=debug LIBGL_DEBUG=verbose \
     LIBGL_DRIVERS_PATH=/opt/enginex-preview-mesa/usr/lib/arm-linux-gnueabihf/dri \
