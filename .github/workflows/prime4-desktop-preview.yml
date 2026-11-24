@@ -76,7 +76,7 @@ jobs:
           if test -f "$task_work/backend.log"; then tail -15 "$task_work/backend.log"; fi
           if test -f "$task_work/runtime/frame.json"; then cat "$task_work/runtime/frame.json"; fi
           core=$(find "$task_work/root" -maxdepth 2 -type f -name 'qemu_*.core' -print -quit 2>/dev/null || true)
-          if test -n "$core"; then gdb-multiarch -batch -ex 'set debuginfod enabled off' -ex "set sysroot $task_work/root" -ex 'thread apply all bt 6' "$task_work/root/usr/Engine/Engine" "$core" 2>&1 | tail -60 || true; fi
+          if test -n "$core"; then sudo gdb-multiarch -batch -ex 'set debuginfod enabled off' -ex "set sysroot $task_work/root" -ex 'thread apply all bt 6' "$task_work/root/usr/Engine/Engine" "$core" 2>&1 | tail -60 || true; fi
           # No firmware, vendor files, runtime credentials or compiled binary is uploaded.
       - uses: actions/upload-artifact@v4
         if: always()

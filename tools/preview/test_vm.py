@@ -49,6 +49,19 @@ def main():
         with urlopen(req,timeout=3) as response:
             return response.read()
 
+    def click(x,y):
+        for action in ('down','up'):
+            request('/api/input',{'kind':'pointer','action':action,'x':x,'y':y,'button':1,'buttons':int(action=='down')})
+
+    def fresh_frame(previous):
+        deadline=time.monotonic()+60
+        while time.monotonic()<deadline:
+            status=json.loads(request('/api/status'))
+            if status.get('engine')=='stopped': raise RuntimeError('Engine stopped during UI navigation')
+            if status.get('frame',{}).get('frame',0)>=previous+2: return request('/frame.png')
+            time.sleep(.5)
+        raise RuntimeError('the actual Engine UI did not produce fresh navigation frames')
+
     try:
         deadline=time.monotonic()+1200
         while time.monotonic()<deadline:
@@ -89,11 +102,19 @@ def main():
         report=json.loads(request('/api/feedback',{'note':'isolated VM smoke test'}))
         assert report['uiOnly'] and len(report['sourceCommit'])==40
         assert [profile[28] for profile in report['dspProfiles']]==[-3,-4,-5,-6], 'non-default VM settings fixture missing'
-        for action in ('down','up'):
-            request('/api/input',{'kind':'pointer','action':action,'x':890,'y':68,'button':1,'buttons':int(action=='down')})
+        # The old offscreen platform reports an 800-pixel screen inside a
+        # 1280-pixel window. EGLFS now reports the correct full screen size.
+        frame=json.loads(request('/api/status'))['frame']['frame']
+        click(340 if args.initial_launcher else 100,725)  # Do not show Wi-Fi setup at startup.
+        before_next=fresh_frame(frame)
+        frame=json.loads(request('/api/status'))['frame']['frame']
+        click(890 if args.initial_launcher else 1130,68)  # Enter the real library/onboarding UI.
+        navigated=fresh_frame(frame)
+        assert navigated!=before_next, 'the real Wi-Fi Next control did not change the Engine screen'
+        (args.directory/'navigation-frame.png').write_bytes(navigated)
+        print('PASS original Engine navigation: dismissed Wi-Fi setup and captured the library/onboarding screen',flush=True)
         # A new plugin instance replaces the UNIX socket and produces fresh frames.
         time.sleep(2)
-        (args.directory/'navigation-frame.png').write_bytes(request('/frame.png'))
         before=json.loads(request('/api/status'))['frame']['frame']
         request('/api/restart',{})
         deadline=time.monotonic()+180
