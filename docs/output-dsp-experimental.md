@@ -6,9 +6,13 @@ The audio callback consumes bounded atomic snapshots prepared on the existing wo
 
 ## Review / local validation
 
-The integration branch is not a release candidate. A flat EQ must bypass the new DSP and must not cause the limiter to engage. SUB detection now gates by each selected source band and the poll worker skips unchanged config files. The live UI has not been built against the original QRC tree. The graph remains an approximate response, not a measured curve. Verify actual sample rate, output routing, and native UI placement; inspect ARM real-time budget and test with music before deployment. Existing release scripts require official images, extra ARM tooling, filesystem modules, and the project's build-host setup. Do not install prebuilt upstream release assets from this fork expecting these changes.
+The integration branch is not a release candidate. A flat EQ must bypass the new DSP and must not cause the limiter to engage. SUB detection now gates by each selected source band and the poll worker skips unchanged config files. The live UI has not been built against the original QRC tree. The graph calculates the actual biquad response at a labeled 48 kHz preview rate, not a measured hardware curve. Verify actual sample rate, output routing, and native UI placement; inspect ARM real-time budget and test with music before deployment. Existing release scripts require official images, extra ARM tooling, filesystem modules, and the project's build-host setup. Do not install prebuilt upstream release assets from this fork expecting these changes.
 
 ```sh
 cc -std=c11 -O2 -Wall -Wextra -Werror tools/ui-mod/test_output_dsp.c -lm -o /tmp/test_od
 /tmp/test_od
 ```
+
+## Further review
+
+The low detector now covers the selectable 15–36 Hz synthesized range, and the worker only republishes profiles that actually change. JC11S is excluded explicitly. The speculative Touch FX shortcut is disabled by default; `ENGINEX_EXPERIMENTAL_SUB_SHORTCUT=1` is an opt-in at pack generation, for layout verification only. SUB remains accessible through Settings → Mixer. Both QML and target-device behavior need validation.

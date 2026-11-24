@@ -24,6 +24,8 @@ int main(void){
     p.hp=0;p.eq_on=0;p.sub_on=1;p.wet=100;p.maxhz=80;p.minhz=25;
     od_prepare(&c,&p,RATE);od_publish(0,&c);tone(140);run(0);assert(amplitude(70)>.004);
     tone(1000);run(0);assert(amplitude(500)<.001);
+    p.minhz=15;p.maxhz=30;od_prepare(&c,&p,RATE);od_publish(1,&c);tone(40);run(1);assert(amplitude(20)>.008);
+    tone(80);run(1);assert(amplitude(40)<.005);
     p.low=p.high=0;od_prepare(&c,&p,RATE);assert(!c.sub);
     od_poll("/nonexistent",RATE);puts("output DSP tests passed");return 0;
 }

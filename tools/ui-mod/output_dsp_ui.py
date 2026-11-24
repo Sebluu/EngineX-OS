@@ -19,7 +19,7 @@ def add_output_dsp(base,qrc,skin):
     at=src.rfind("}")
     bridge='''
     function odOpen(section) {
-        if (Config.device.name !== "JC11") return
+        if (root.scBoard !== "JC11") return
         if (odPanel.busy) return
         odPanel.section=section; odPanel.pair=0; odPanel.advanced=false
         odPanel.vals=[]; odPanel.profiles=[]; odPanel.dirty=false; odPanel.message="Loading..."
@@ -28,7 +28,7 @@ def add_output_dsp(base,qrc,skin):
     property bool odSubEnabled: false
     property bool odSubBusy: false
     function odToggle() {
-        if (odSubBusy || Config.device.name !== "JC11") return
+        if (odSubBusy || root.scBoard !== "JC11") return
         odSubBusy=true
         var x=new XMLHttpRequest()
         x.open("POST","http://127.0.0.1:8080/v1/enginex/output-dsp")
@@ -41,7 +41,7 @@ def add_output_dsp(base,qrc,skin):
         x.send(JSON.stringify({section:"sub",pair:0,toggle:true}))
     }
     Timer {
-        interval: 1500; repeat: true; running: @SUB@ && Config.device.name==="JC11"
+        interval: 1500; repeat: true; running: @SUB@ && root.scBoard==="JC11"
         onTriggered: {
             if(root.odSubBusy || odPanel.visible)return
             root.odSubBusy=true
@@ -66,9 +66,13 @@ def add_output_dsp(base,qrc,skin):
     rows=[]
     for enabled,title,section in [(eq,"Output Equalizer","eq"),(sub,"Subharmonic Synthesizer","sub")]:
         if enabled:
-            rows.append('EntryBase.ListEntry { text: "'+title+'"; visible: Config.device.name === "JC11"; values: ["Closed", "Open"]; currentValue: "Closed"; onSelected: function(index) { if(index===1)root.odOpen("'+section+'") } },\n\t\t')
+            rows.append('EntryBase.ListEntry { text: "'+title+'"; visible: root.scBoard === "JC11"; values: ["Closed", "Open"]; currentValue: "Closed"; onSelected: function(index) { if(index===1)root.odOpen("'+section+'") } },\n\t\t')
     base[p]=t[:m.start()]+"".join(rows)+t[m.start():]
     if not sub:return
+    # Opt in only with a confirmed vendor performance layout; stock fallback is settings.
+    import os
+    if os.environ.get("ENGINEX_EXPERIMENTAL_SUB_SHORTCUT") != "1":
+        return
     # Match the *instance*, never the type declaration. If stock skin changes,
     # retain settings access rather than covering the performance screen.
     candidates=[]
@@ -82,7 +86,7 @@ def add_output_dsp(base,qrc,skin):
         return
     p,t,m=candidates[0]
     button=m.group(1)+'''Rectangle {
-        visible: Config.device.name === "JC11"; width: 52; height: 34; radius: 5
+        visible: root.scBoard === "JC11"; width: 52; height: 34; radius: 5
         color: root.odSubEnabled ? "#167c66" : "#23313e"
         Text { anchors.centerIn: parent; text: "SUB"; color: "white" }
         MouseArea {

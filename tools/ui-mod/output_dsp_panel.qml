@@ -1,5 +1,6 @@
 Rectangle {
     id: odPanel
+    parent: ODC.Overlay.overlay || uiContainer
     visible: false; z: 100000; anchors.centerIn: parent
     width: Math.min(parent.width-32,920); height: Math.min(parent.height-32,580)
     color: "#131b24"; radius: 8
@@ -37,6 +38,21 @@ Rectangle {
     function select(i){
         if(busy||dirty||profiles.length!==4)return
         pair=i;vals=profiles[i].slice()
+    }
+    // RBJ coefficients match the native filters. 48 kHz is a preview rate.
+    function response(type,hz,q,db,f) {
+        if(hz<=0 || (type<3 && db===0))return 0
+        var w=2*Math.PI*Math.min(hz,48000*.46)/48000, s=Math.sin(w), c=Math.cos(w)
+        var A=Math.pow(10,db/40), al=s/(2*q), b0,b1,b2,a0,a1,a2
+        if(type===0){b0=1+al*A;b1=-2*c;b2=1-al*A;a0=1+al/A;a1=-2*c;a2=1-al/A}
+        else if(type===1||type===2){
+            var t=2*Math.sqrt(A)*al,m=A-1,p=A+1
+            if(type===1){b0=A*(p-m*c+t);b1=2*A*(m-p*c);b2=A*(p-m*c-t);a0=p+m*c+t;a1=-2*(m+p*c);a2=p+m*c-t}
+            else {b0=A*(p+m*c+t);b1=-2*A*(m+p*c);b2=A*(p+m*c-t);a0=p-m*c+t;a1=2*(m-p*c);a2=p-m*c-t}
+        } else {b0=(1+c)*.5;b1=-2*b0;b2=b0;a0=1+al;a1=-2*c;a2=1-al}
+        var z=2*Math.PI*f/48000, cr=Math.cos(z), ci=Math.sin(z), dr=Math.cos(2*z), di=Math.sin(2*z)
+        var nr=b0+b1*cr+b2*dr,ni=b1*ci+b2*di,ar=a0+a1*cr+a2*dr,ai=a1*ci+a2*di
+        return 10*Math.log(Math.max(1e-16,(nr*nr+ni*ni)/(ar*ar+ai*ai)))/Math.LN10
     }
     onValsChanged: if(odGraph)odGraph.requestPaint()
     MouseArea { anchors.fill: parent; onClicked: {} }
@@ -80,14 +96,14 @@ Rectangle {
                         for(var k=0;k<width;k++){
                             var f=10*Math.pow(2200,k/width),g=0
                             if(v[0]){
-                                for(var b=0;b<8;b++){var j=11+3*b,u=Math.log(f/v[j]);g+=v[j+2]*(b===0?1/(1+Math.exp(4*u)):b===7?1/(1+Math.exp(-4*u)):Math.exp(-u*u*v[j+1]*v[j+1]))}
-                                if(v[1])g-=10*Math.log(1+Math.pow(v[1]/f,8))/Math.LN10
+                                for(var b=0;b<8;b++){var j=11+3*b;g+=odPanel.response(b===0?1:b===7?2:0,v[j],v[j+1],v[j+2],f)}
+                                if(v[1])g+=odPanel.response(3,v[1],.541196,0,f)+odPanel.response(3,v[1],1.306563,0,f)
                             }
                             var y=Math.max(3,Math.min(height-18,height/2-g*3));if(k===0)ctx.moveTo(k,y);else ctx.lineTo(k,y)
                         }ctx.stroke()
                     }
                 }
-                ODC.Label {visible:odPanel.section==="eq" && @EQ@;text:"10 Hz – 22 kHz · approximate response";color:"#9ab4c6"}
+                ODC.Label {visible:odPanel.section==="eq" && @EQ@;text:"10 Hz – 22 kHz · calculated response at 48 kHz";color:"#9ab4c6"}
                 Row {
                     enabled:!odPanel.busy && odPanel.vals.length===35
                     visible:odPanel.section==="eq" && @EQ@;spacing:5

@@ -507,7 +507,7 @@ static void lim_poll_once(void) {
         if (!checked) {
             char code[8] = {0};
             FILE *f = fopen(product_code_path, "r");
-            if (f) { if (fgets(code, sizeof code, f)) { checked = 1; __atomic_store_n(&od_allowed, !strncmp(code,"JC11",4), __ATOMIC_RELEASE); } fclose(f); }
+            if (f) { if (fgets(code, sizeof code, f)) { checked = 1; __atomic_store_n(&od_allowed, !strncmp(code,"JC11",4) && (code[4]==0 || code[4]=='\n'), __ATOMIC_RELEASE); } fclose(f); }
         }
         if (__atomic_load_n(&od_allowed, __ATOMIC_ACQUIRE))
             od_poll(UI_ROOT "/output-dsp-v1.conf", __atomic_load_n(&master_rate, __ATOMIC_ACQUIRE));

@@ -66,6 +66,7 @@ static void od_prepare(struct od_cfg *c,const struct od_params *p,unsigned rate)
     for(int i=0;i<8;i++)if(p->bands[i][2]!=0)eq_changed=1;
     c->eq=OD_FEATURE_EQ && p->eq_on!=0 && eq_changed;
     c->sub=OD_FEATURE_SUB && p->sub_on!=0 && p->wet>0 && (p->low>0 || p->high>0);
+    if (!c->eq && !c->sub) return;
     c->wet=p->wet*.01f;c->level[0]=p->low*.01f;c->level[1]=p->high*.01f;
     c->threshold=pow(10,p->threshold/20);
     c->attack=1-exp(-1/(rate*p->attack*.001));c->release=1-exp(-1/(rate*p->release*.001));
@@ -75,7 +76,7 @@ static void od_prepare(struct od_cfg *c,const struct od_params *p,unsigned rate)
         if(p->hp>=10){c->filters[8]=od_filter(3,p->hp,.541196,0,rate);c->filters[9]=od_filter(3,p->hp,1.306563,0,rate);}
     }
     if(c->sub)for(int j=0;j<2;j++){
-        double lo=fmax(j?72:48,p->minhz*2),hi=fmin(j?160:72,p->maxhz*2);
+        double lo=fmax(j?72:30,p->minhz*2),hi=fmin(j?160:72,p->maxhz*2);
         if(hi<=lo){c->level[j]=0;continue;}
         c->min_period[j]=(unsigned)(rate/hi);
         c->max_period[j]=(unsigned)(rate/lo)+1;
@@ -185,8 +186,10 @@ static void od_poll(const char *path,unsigned rate) {
     if(!good){memset(next,0,sizeof next);for(int p=0;p<OD_PAIRS;p++){next[p].attack=12;next[p].release=100;}}
     had_stat=exists;
     if(exists)old_stat=st;
-    if(have&&previous_rate==rate&&!memcmp(next,previous,sizeof next))return;
+    for(int p=0;p<OD_PAIRS;p++) {
+        if (have && previous_rate==rate && !memcmp(&next[p],&previous[p],sizeof next[p])) continue;
+        struct od_cfg c; od_prepare(&c,&next[p],rate); od_publish(p,&c);
+    }
     memcpy(previous,next,sizeof next);have=1;previous_rate=rate;
-    for(int p=0;p<OD_PAIRS;p++){struct od_cfg c;od_prepare(&c,&next[p],rate);od_publish(p,&c);}
 }
 #endif
