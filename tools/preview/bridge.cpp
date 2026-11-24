@@ -21,6 +21,16 @@
 #include <sys/un.h>
 #include <unistd.h>
 
+// QtGui's test event entry points, declared in QtTest's public mouse/keyboard
+// headers. Signatures verified against the pinned firmware's Qt 6.7.2 source.
+// Weak references keep capture available on a build without test support.
+QT_BEGIN_NAMESPACE
+extern void qt_handleMouseEvent(QWindow *, const QPointF &, const QPointF &,
+    Qt::MouseButtons, Qt::MouseButton, QEvent::Type, Qt::KeyboardModifiers, int) __attribute__((weak));
+extern void qt_handleKeyEvent(QWindow *, QEvent::Type, int, Qt::KeyboardModifiers,
+    const QString &, bool, ushort) __attribute__((weak));
+QT_END_NAMESPACE
+
 namespace {
 constexpr const char *directory = "/tmp/preview";
 int input = -1;
@@ -63,12 +73,19 @@ void dispatch() {
             const auto type = action == 1 ? QEvent::MouseButtonPress : action == 3 ? QEvent::MouseButtonRelease : QEvent::MouseMove;
             const QPointF local(x, y);
             const QPointF global = target->mapToGlobal(local.toPoint());
+            if (qt_handleMouseEvent) {
+                qt_handleMouseEvent(target, local, global,
+                    Qt::MouseButtons(static_cast<Qt::MouseButton>(buttons)),
+                    static_cast<Qt::MouseButton>(button), type,
+                    Qt::KeyboardModifiers(static_cast<Qt::KeyboardModifier>(modifiers)),
+                    static_cast<int>(clock.elapsed()) + 1);
+                continue;
+            }
             QMouseEvent event(type, local, local, global, static_cast<Qt::MouseButton>(button),
                               Qt::MouseButtons(static_cast<Qt::MouseButton>(buttons)),
                               Qt::KeyboardModifiers(static_cast<Qt::KeyboardModifier>(modifiers)));
             event.setTimestamp(static_cast<quint64>(clock.elapsed()) + 1);
-            // Use the QtTest header's native-event helper, then notify directly:
-            // sendEvent clears the spontaneous flag that Engine requires.
+            // Fallback for a Qt build without the window-system test entry point.
             QSpontaneKeyEvent::setSpontaneous(&event);
             QCoreApplication::instance()->notify(target, &event);
         } else if (sscanf(packet, "K %d %d %d %u", &action, &key, &modifiers, &character) == 4) {
@@ -76,6 +93,11 @@ void dispatch() {
                 (character >= 0xd800 && character <= 0xdfff) || (modifiers & ~0x1e000000)) continue;
             const char32_t point = character;
             const QString text = character ? QString::fromUcs4(&point, 1) : QString();
+            if (qt_handleKeyEvent) {
+                qt_handleKeyEvent(target, action == 1 ? QEvent::KeyPress : QEvent::KeyRelease,
+                    key, Qt::KeyboardModifiers(static_cast<Qt::KeyboardModifier>(modifiers)), text, false, 1);
+                continue;
+            }
             QKeyEvent event(action == 1 ? QEvent::KeyPress : QEvent::KeyRelease, key,
                             Qt::KeyboardModifiers(static_cast<Qt::KeyboardModifier>(modifiers)), text);
             event.setTimestamp(static_cast<quint64>(clock.elapsed()) + 1);
@@ -121,6 +143,7 @@ void start() {
     QObject::connect(pictures, &QTimer::timeout, QCoreApplication::instance(), capture);
     pictures->start(750);
     fprintf(stderr, "PREVIEW_BRIDGE_READY Qt=%s\n", qVersion());
+    fprintf(stderr, "PREVIEW_GUI_INPUT mouse=%d keyboard=%d\n", qt_handleMouseEvent != nullptr, qt_handleKeyEvent != nullptr);
 }
 
 }
