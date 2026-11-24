@@ -24,22 +24,25 @@ def run(rootfs, qrc):
         fx_start, fx_end = led.binding_span(patched["DJFxActivate.qml"], led.FX_MARKER)
         play = patched["PlayCue.qml"][play_start:play_end]
         fx = patched["DJFxActivate.qml"][fx_start:fx_end]
+        sweep_start, sweep_end = led.binding_span(patched["SweepFxSelect.qml"], led.SWEEP_MARKER)
+        sweep = patched["SweepFxSelect.qml"][sweep_start:sweep_end]
         assert "enabled: !deckConfig.inComputerMode" in patched["PlayCue.qml"]
         deck = dict(inLineInMode=False, inBluetoothMode=False, downloading=False,
                     playAfterDownload=False, playing=False, playlistDeckPlaying=False,
                     songLoaded=True, cueLEDState=True, cueLEDFlashing=False,
                     tempoSyncedFlashState=False, inComputerMode=False)
         cases = []
-        def add(name, changes, expected, board=led.SCOPE, active=True, bluetooth=False):
+        def add(name, changes, expected, board=led.SCOPE, active=True, bluetooth=False, sweep_assigned=True, sweep_enabled=True):
             for phase in (False, True):
                 d = copy.deepcopy(deck); d.update(changes); d["tempoSyncedFlashState"] = phase
                 play_value = expected if isinstance(expected, int) else expected(phase)
                 fx_value = (127 if active else 1) if board == led.SCOPE else (127 if active and phase else 1)
                 cases.append(dict(name=name + "/" + str(phase), deck=d,
                                   assignment={"objectName": board},
-                                  globalState={"bluetooth": {"play": bluetooth}, "flashStateFast": phase},
+                                  globalState={"bluetooth": {"play": bluetooth}, "flashStateFast": phase, "flashState": phase},
                                   active=active, play=play_value, fx=fx_value,
-                                  enabled=not d["inComputerMode"]))
+                                  enabled=not d["inComputerMode"], sweepAssigned=sweep_assigned, sweepEnabled=sweep_enabled,
+                                  sweep=(127 if sweep_assigned and (board == led.SCOPE or phase or not active) else 1) if sweep_enabled else 0))
         add("playing", {"playing": True}, 127)
         add("paused", {}, 0)
         add("track-end", {"playing": False}, 0, active=False)
@@ -50,6 +53,8 @@ def run(rootfs, qrc):
         add("bluetooth-paused", {"inBluetoothMode": True}, 0)
         add("line-input", {"inLineInMode": True, "playing": True}, 0)
         add("computer-mode", {"inComputerMode": True, "playing": True}, 127)
+        add("sweep-unselected", {}, 0, sweep_assigned=False)
+        add("sweep-disabled", {}, 0, sweep_enabled=False)
         add("other-board-paused", {}, lambda phase: 127 if phase else 0, board="PRIME 2 Controller Assignment")
         add("other-board-empty", {"songLoaded": False}, 1, board="PRIME 4+ Controller Assignment")
         qml = '''import QtQuick 2.12
@@ -62,11 +67,14 @@ Item {
     property var fxLEDsItem: ({inDJMode: true, mixerChannel: {active: false}})
     property var fxConfig: ({fxEnabled: true})
     property bool flashOnActive: true
+    property bool assigned: true
+    property var valueProperties: []
     readonly property bool fxOn: fxLEDsItem.mixerChannel.active
 @GUARD@
     readonly property bool nativePlayLEDEnabled: !deckConfig.inComputerMode
     readonly property int playValue: { @PLAY@ }
     readonly property int fxValue: { @FX@ }
+    readonly property int sweepValue: { @SWEEP@ }
     property var cases: @CASES@
     property int caseIndex: 0
     function step() {
@@ -74,9 +82,11 @@ Item {
         var row=cases[caseIndex]
         assignment=row.assignment;deckConfig=row.deck;globalConfig=row.globalState
         fxLEDsItem={inDJMode:true,mixerChannel:{active:row.active}}
+        enabled=row.sweepEnabled;assigned=row.sweepAssigned
+        valueProperties=[{translator:{unnormalized:row.active?1:0.5,normalized:row.active?1:0.5,value:row.active?1:0.5,state:row.active}}]
         Qt.callLater(function(){
-            if(playValue!==row.play || fxValue!==row.fx || nativePlayLEDEnabled!==row.enabled) {
-                console.error("LED CASE FAILED",row.name,playValue,row.play,fxValue,row.fx,nativePlayLEDEnabled,row.enabled)
+            if(playValue!==row.play || fxValue!==row.fx || nativePlayLEDEnabled!==row.enabled || sweepValue!==row.sweep) {
+                console.error("LED CASE FAILED",row.name,playValue,row.play,fxValue,row.fx,nativePlayLEDEnabled,row.enabled,sweepValue,row.sweep)
                 Qt.exit(3);return
             }
             caseIndex++;next.restart()
@@ -87,7 +97,7 @@ Item {
     Timer {interval:8000;running:true;onTriggered:Qt.exit(4)}
 }
 '''
-        qml = qml.replace("@GUARD@", led.GUARD).replace("@PLAY@", play).replace("@FX@", fx).replace("@CASES@", json.dumps(cases))
+        qml = qml.replace("@GUARD@", led.GUARD).replace("@PLAY@", play).replace("@FX@", fx).replace("@SWEEP@", sweep).replace("@CASES@", json.dumps(cases))
         target = base / "LEDStates.qml"; target.write_text(qml)
         env = dict(os.environ, QT_SELECT="qt5", QT_QPA_PLATFORM="offscreen", QT_QUICK_BACKEND="software")
         result = subprocess.run(["qmlscene", str(target)], env=env, capture_output=True, text=True, timeout=15)
@@ -96,6 +106,28 @@ Item {
             raise SystemExit("LED Qt state matrix failed")
         if any(word in result.stderr for word in ("ReferenceError", "TypeError", "is not a type")):
             raise SystemExit("invalid LED QML binding")
+        (base / "GuardProbe.qml").write_text("import QtQuick 2.12\nItem {\n    id: module\n" + led.GUARD + "}\n")
+        scope = '''import QtQuick 2.12
+Item {
+    id: assignment
+    objectName: "PRIME 4 Controller Assignment"
+    GuardProbe { id: probe }
+    Component.onCompleted: Qt.callLater(function(){
+        if(!probe.scPrime4SteadyLEDs){console.error("JC11 creation scope not visible");Qt.exit(5);return}
+        assignment.objectName="PRIME 4 PLUS Controller Assignment"
+        Qt.callLater(function(){
+            if(probe.scPrime4SteadyLEDs){console.error("guard leaked to other board");Qt.exit(6);return}
+            console.log("LED_CREATION_SCOPE_PASSED");Qt.quit()
+        })
+    })
+    Timer { interval:3000;running:true;onTriggered:Qt.exit(7) }
+}
+'''
+        (base / "AssignmentScope.qml").write_text(scope)
+        check = subprocess.run(["qmlscene", str(base / "AssignmentScope.qml")], env=env, capture_output=True, text=True, timeout=10)
+        print(check.stdout, check.stderr)
+        if check.returncode or "LED_CREATION_SCOPE_PASSED" not in check.stdout + check.stderr:
+            raise SystemExit("LED creation-context guard failed")
         print("LED_FIXTURE_ARCHIVE=" + str(a))
         return a.read_bytes()
 

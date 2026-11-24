@@ -11,9 +11,9 @@ DJ-FX flashing. The QML-only builder in tools/mods/build_prime4_led_mod.py
 verifies the original controller and module hashes and that this creation
 context is uniquely JC11 within the supplied firmware before packaging.
 
-The Mod overrides the shared PlayCue and DJFxActivate QRC modules. Its small
+The Mod overrides the shared PlayCue, DJFxActivate and SweepFxSelect QRC modules. Its small
 LED-only conditions are scoped to that exact JC11 assignment context.
-Paused, ended and empty PLAY LEDs turn off; active DJ-FX LEDs stay continuously
+Paused, ended and empty PLAY LEDs turn off; active DJ-FX and Sweep-FX selection LEDs stay continuously
 on. CUE, actions, transport, MIDI note/channel routing, layering, RGB PLAY LEDs
 and audio remain unchanged. Unknown assignment contexts retain vendor logic.
 
