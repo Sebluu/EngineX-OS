@@ -30,6 +30,7 @@ int main(void) {
     FILE*f=fopen(path,"w");assert(f);fputs("nan 1 broken\n",f);fclose(f);check(path,3,0,0);
     save(path);check(path,3,OD_FEATURE_EQ,OD_FEATURE_SUB);
     f=fopen(path,"a");assert(f);fputs("trailing token",f);fclose(f);check(path,3,0,0);
+    f=fopen(path,"w");assert(f);for(int i=0;i<8193;i++)fputc(' ',f);fclose(f);check(path,3,0,0);
     unlink(path);assert(!mkfifo(path,0600));check(path,3,0,0);unlink(path);
     save(lease);assert(!symlink(lease,path));check(path,3,0,0);unlink(path);
     save(path);check(path,3,OD_FEATURE_EQ,OD_FEATURE_SUB);unlink(path);check(path,3,0,0);

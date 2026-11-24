@@ -2,12 +2,12 @@ name: Experimental output DSP tests
 on:
   push:
     branches: [test/all-features, feature/dsp-core, feature/output-eq, feature/subharmonic-synth]
-    paths: ['tools/ui-mod/**', 'tools/mods/**', 'docs/mods/src/**', 'pkg/webui/**', '.github/workflows/output-dsp-experimental.yml']
+    paths: ['tools/ui-mod/**', 'tools/mods/**', 'docs/mods/src/**', 'pkg/webui/**', 'pkg/mods/**', 'tests/test_boot_safety.sh', 'tests/test_rootfs_overlay.sh', '.github/workflows/output-dsp-experimental.yml']
   workflow_dispatch:
 permissions:
   contents: read
 concurrency:
-  group: output-dsp-${{ github.ref }}
+  group: output-dsp-${{ github.ref }}-${{ github.sha }}
   cancel-in-progress: true
 jobs:
   components:
@@ -102,3 +102,16 @@ jobs:
         run: |
           gcc -std=c11 -O1 -g -fsanitize=thread -fno-pie -no-pie -DOD_FEATURE_EQ=1 -DOD_FEATURE_SUB=1 tools/ui-mod/test_output_dsp_threads.c -pthread -lm -o /tmp/od-tsan
           /tmp/od-tsan
+  format:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Check Go formatting and record exact formatted source
+        run: |
+          gofmt -w pkg/webui/output_dsp*.go
+          python3 -c 'import json,pathlib; [print("OD_FORMATTED="+json.dumps({str(p):p.read_text()})) for p in pathlib.Path("pkg/webui").glob("output_dsp*.go")]'
+          git diff --exit-code --stat -- pkg/webui/output_dsp*.go
