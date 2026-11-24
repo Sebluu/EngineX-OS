@@ -14,6 +14,14 @@ import server
 
 
 class LauncherTests(unittest.TestCase):
+    def test_vm_source_updates_require_an_explicit_update(self):
+        old = {'commit':'a'*40, 'port':8765}
+        new = {'commit':'b'*40, 'port':8765}
+        with self.assertRaisesRegex(ValueError, 'update'):
+            launch.check_identity(old, new)
+        launch.check_identity(old, new, update=True)
+        launch.check_identity(old, old)
+
     def test_vm_exposes_only_loopback_and_generated_disks(self):
         command = launch.qemu_command('/tmp/preview-test', 8765, 4096, 4, 'tcg')
         joined = ' '.join(command)
@@ -35,6 +43,9 @@ class LauncherTests(unittest.TestCase):
         self.assertNotIn('ssh_authorized_keys', config)
         self.assertFalse(config['ssh_pwauth'])
         self.assertIn('tools', launch.SOURCE_PATHS)
+        bootstrap = files['/var/lib/enginex-preview/bootstrap.sh']['content']
+        self.assertLess(bootstrap.index('systemctl stop'), bootstrap.index('tar --no-same-owner'))
+        self.assertLess(bootstrap.index('guest-prepare.sh'), bootstrap.index('mv "$next_source" /opt/enginex-preview-source'))
 
 
 class HTTPTests(unittest.TestCase):

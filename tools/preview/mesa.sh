@@ -13,7 +13,7 @@ if [ ! -f "$mesa/ready" ]; then
     apt-get -o Dir::State::status=/dev/null -o Dir::Cache::archives="$mesa/debs" \
         -o Debug::NoLocking=true --download-only --assume-yes --no-install-recommends \
         install libegl-mesa0:armhf libegl1:armhf libgles2:armhf libgl1-mesa-dri:armhf
-    (cd "$mesa/debs" && apt-get download libegl-dev:armhf libglvnd-core-dev:armhf)
+    (cd "$mesa/debs" && apt-get download libegl-dev:armhf libgl-dev:armhf)
     for archive in "$mesa/debs/"*.deb; do dpkg-deb -x "$archive" "$mesa/root"; done
     touch "$mesa/ready"
 fi

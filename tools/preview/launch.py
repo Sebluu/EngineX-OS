@@ -46,12 +46,17 @@ WantedBy=multi-user.target
 '''
     bootstrap = '''#!/bin/bash
 set -euo pipefail
+grep -Eqi 'QEMU|Standard PC' /sys/class/dmi/id/product_name || exit 2
 cd /var/lib/enginex-preview
 sha256sum -c source.sha256
-mkdir -p /opt/enginex-preview-source
-tar --no-same-owner -xzf source.tar.gz -C /opt/enginex-preview-source
-cp source.commit /opt/enginex-preview-source/.preview-source-sha
-bash /opt/enginex-preview-source/tools/preview/guest-prepare.sh
+systemctl stop enginex-preview.service || true
+next_source=$(mktemp -d /opt/enginex-preview-source.next.XXXXXXXX)
+tar --no-same-owner -xzf source.tar.gz -C "$next_source"
+cp source.commit "$next_source/.preview-source-sha"
+bash "$next_source/tools/preview/guest-prepare.sh"
+rm -rf /opt/enginex-preview-source.previous
+if [ -d /opt/enginex-preview-source ]; then mv /opt/enginex-preview-source /opt/enginex-preview-source.previous; fi
+mv "$next_source" /opt/enginex-preview-source
 systemctl daemon-reload
 systemctl enable enginex-preview.service
 systemctl start --no-block enginex-preview.service
@@ -99,6 +104,11 @@ def qmp_powerdown(directory):
             stream.write((json.dumps({'execute':command})+'\n').encode()); stream.flush()
             stream.readline()
 
+def check_identity(previous, current, update=False):
+    if previous != current and not update:
+        raise ValueError('Diese VM verwendet einen anderen Quellstand oder Port. '
+                         'Beende die Vorschau und starte einmal mit update, um ihre Daten weiterzuverwenden.')
+
 def stop_vm(directory, port):
     try:
         request=Request(f'http://127.0.0.1:{port}/api/stop',data=b'{}',headers={'Content-Type':'application/json'})
@@ -108,7 +118,7 @@ def stop_vm(directory, port):
 
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('action',nargs='?',choices=('start','stop','logs'),default='start')
+    parser.add_argument('action',nargs='?',choices=('start','update','stop','logs'),default='start')
     parser.add_argument('--directory',type=Path,default=Path(os.environ.get('XDG_CACHE_HOME',Path.home()/'.cache'))/'enginex-preview')
     parser.add_argument('--port',type=int,default=8765)
     parser.add_argument('--memory',type=int,default=4096)
@@ -157,8 +167,9 @@ def main():
     commit=subprocess.check_output(['git','rev-parse','HEAD'],cwd=ROOT,text=True).strip()
     identity={'commit':commit,'port':args.port}
     pin=directory/'preview.json'
-    if pin.exists() and json.loads(pin.read_text()) != identity:
-        parser.exit(2,'Diese VM gehört zu einem anderen Quellstand oder Port. Starte die neue Vorschau mit einem frischen --directory.\n')
+    if pin.exists():
+        try: check_identity(json.loads(pin.read_text()), identity, args.action=='update')
+        except ValueError as error: parser.exit(2,str(error)+'\n')
     archive=subprocess.check_output(['git','archive','--format=tar.gz','HEAD','--',*SOURCE_PATHS],cwd=ROOT)
     if len(archive)>64*1024*1024: parser.exit(1,'Der Vorschau-Quellstand ist unerwartet groß.\n')
     (directory/'user-data').write_text(cloud_config(archive,commit,args.port))
