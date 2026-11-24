@@ -71,7 +71,14 @@ for section in ('eq', 'sub'):
     deadline=time.monotonic()+40
     while time.monotonic()<deadline:
         if 'PREVIEW_MOD_PANEL_READY section='+section in log.read_text(errors='replace'):
-            print('PASS original Engine: combined-branch '+section+' settings panel loaded with real SDK data')
+            loaded_frame=json.loads((runtime/'frame.json').read_text())['frame']
+            while time.monotonic()<deadline:
+                if json.loads((runtime/'frame.json').read_text())['frame']>=loaded_frame+2:
+                    break
+                time.sleep(.1)
+            else:
+                raise SystemExit('the loaded '+section+' panel did not render fresh frames')
+            print('PASS original Engine: combined-branch '+section+' settings panel loaded with real SDK data and rendered fresh frames')
             break
         time.sleep(.25)
     else:

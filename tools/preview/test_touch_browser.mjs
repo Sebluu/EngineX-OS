@@ -36,12 +36,15 @@ try{
   };
   await command('Emulation.setDeviceMetricsOverride',{width:1600,height:1000,deviceScaleFactor:1,mobile:false});
   await command('Emulation.setTouchEmulationEnabled',{enabled:true,maxTouchPoints:1});
+  await command('Page.bringToFront');
+  await command('Emulation.setFocusEmulationEnabled',{enabled:true});
   let loaded=false;
   for(let i=0;i<200;i++){
     loaded=await evaluate('Boolean(document.getElementById("frame")?.naturalWidth && document.getElementById("status").textContent.includes("Lokale Vorschau"))');
     if(loaded)break;await delay(50);
   }
   assert.ok(loaded,'The preview image did not load in Chrome');
+  await evaluate('window.touchTrace=[];for(const name of ["touchstart","touchend","pointerdown","pointerup"])document.addEventListener(name,e=>touchTrace.push({type:e.type,target:e.target.id,prevented:e.defaultPrevented}),{passive:true})');
   await evaluate('document.body.style.minHeight="2200px";window.scrollTo(0,180)');
   const bounds=await evaluate('JSON.stringify((()=>{const r=document.getElementById("frame").getBoundingClientRect();return {x:r.x,y:r.y,width:r.width,height:r.height,scroll:window.scrollY}})())');
   const r=JSON.parse(bounds),x=r.x+r.width*.6,y=r.y+r.height*.6;
@@ -49,15 +52,22 @@ try{
   await touch('touchStart',x,y);
   for(let i=1;i<=5;i++){await touch('touchMove',x,y-i*20);await delay(25);}
   await touch('touchEnd');await delay(200);
+  assert.ok(await evaluate('touchTrace.some(e=>e.type==="touchstart"&&e.target==="frame")'),'Chrome did not deliver the in-frame touch');
   assert.ok(Math.abs(await evaluate('window.scrollY')-r.scroll)<=1,'Touch inside Engine scrolled the browser page');
   // Use the blank page below the device/feedback controls. A textarea has its
   // own touch-scrolling behavior and is not a test of surrounding page scroll.
   await evaluate('window.scrollTo(0,700)');await delay(100);
   const outsideBefore=await evaluate('window.scrollY');
-  await command('Input.synthesizeScrollGesture',{x:200,y:450,yDistance:-130,speed:500,gestureSourceType:'touch'});
-  await delay(200);
+  const outsideTarget=await evaluate('JSON.stringify((()=>{const e=document.elementFromPoint(200,550);return {tag:e?.tagName,id:e?.id,touchAction:e?getComputedStyle(e).touchAction:null,inside:!!e?.closest("#screen"),height:innerHeight}})())');
+  assert.equal(JSON.parse(outsideTarget).inside,false,'Outside test point is still inside Engine');
+  // Use the same raw finger events as the in-frame check. Chromium's separate
+  // synthesizeScrollGesture path can complete without producing a touch scroll
+  // in a desktop headless session, leaving a false failure unrelated to the UI.
+  await touch('touchStart',200,550);await delay(50);
+  for(let i=1;i<=8;i++){await touch('touchMove',200,550-i*20);await delay(35);}
+  await touch('touchEnd');await delay(400);
   const outsideAfter=await evaluate('window.scrollY');
-  assert.ok(outsideAfter>outsideBefore+20,`Touch outside Engine did not scroll the blank page: ${outsideBefore} → ${outsideAfter}`);
+  assert.ok(Math.abs(outsideAfter-outsideBefore)>20,`Touch outside Engine did not scroll the blank page: ${outsideBefore} → ${outsideAfter}; ${outsideTarget}; events=${await evaluate('JSON.stringify(touchTrace)')}`);
   await evaluate('window.scrollTo(0,0)');
   const box=JSON.parse(await evaluate('JSON.stringify((()=>{const r=document.getElementById("frame").getBoundingClientRect();return {x:r.x,y:r.y,width:r.width,height:r.height}})())'));
   const cx=box.x+box.width*100/1280,cy=box.y+box.height*725/800;

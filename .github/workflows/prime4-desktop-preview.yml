@@ -55,6 +55,7 @@ jobs:
           python3 -m unittest discover -s tools/preview -p test_preview.py -v
           python3 -m unittest discover -s tools/preview -p test_frames.py -v
           node --test tools/preview/test_frontend.mjs
+          python3 tools/preview/test_browser.py
           gofmt -w tools/preview/backend.go
           GOOS=linux GOARCH=arm GOARM=7 CGO_ENABLED=0 go build -trimpath -o "$RUNNER_TEMP/desktop-preview/backend" tools/preview/backend.go
       - name: Extract and run actual ARM Engine with synthetic input target
