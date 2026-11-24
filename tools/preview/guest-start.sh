@@ -17,6 +17,11 @@ python3 "$repo/tools/preview/server.py" --listen 0.0.0.0 --runtime "$work/runtim
 viewer=$!
 trap 'kill -TERM "$viewer" 2>/dev/null || true' EXIT
 export GOMAXPROCS=2
+export GOPATH=/var/cache/enginex-preview/go
+export GOMODCACHE=/var/cache/enginex-preview/go/pkg/mod
+export GOCACHE=/var/cache/enginex-preview/go-build
+export GOTOOLCHAIN=auto
+mkdir -p "$GOPATH" "$GOMODCACHE" "$GOCACHE"
 export ENGINEX_BUILD_TAG="desktop-preview $(head -c 8 "$repo/.preview-source-sha")"
 cd "$repo"
 if bash tools/preview/build.sh "$work"; then
