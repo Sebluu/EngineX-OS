@@ -2,7 +2,7 @@ name: PRIME 4 isolated installed-Mod reboot gate
 on:
   push:
     branches: [test/all-features]
-    paths: ['.github/workflows/prime4-installed-mods-gate.yml', 'tools/az01-packer/prime4-installed-mods-gate.py', 'tools/az01-packer/run-prime4-gate.sh', 'tools/mods/seed_prime4_gate.go', 'tools/ui-mod/**', 'tools/mods/build_*dsp*', 'tools/mods/*prime4_led*', 'pkg/webui/**', 'pkg/mods/**', 'rootfs-overlay/**']
+    paths: ['.github/workflows/prime4-installed-mods-gate.yml', 'tools/az01-packer/prime4-installed-mods-gate.py', 'tools/az01-packer/run-prime4-gate.sh', 'tools/mods/seed_prime4_gate.go', 'tools/ui-mod/**', 'tools/mods/build_*dsp*', 'tools/mods/*prime4_led*', 'pkg/webui/**', 'pkg/mods/**', 'rootfs-overlay/**', '!tools/ui-mod/test*', '!tools/mods/test*']
   workflow_dispatch:
 permissions:
   contents: read
@@ -90,7 +90,10 @@ jobs:
           if test -f "$task_work/gate/audit.txt"; then grep '^FAIL' "$task_work/gate/audit.txt" || true; fi
           for part in old new boot2; do
             if test -f "$task_work/gate/$part-engine.log"; then
-              grep -aE 'engine-ui-hook:.*(output|JC11|pack)|SCPROBE error|Syntax error|Type .* unavailable|QQmlComponent: Component is not ready|Crash with' "$task_work/gate/$part-engine.log" | head -40 || true
+              grep -aE -A 2 'engine-ui-hook:.*(output|JC11|pack)|SCPROBE error|Syntax error|Type .* unavailable|QQmlComponent: Component is not ready|Crash with' "$task_work/gate/$part-engine.log" | head -40 || true
             fi
           done
+          if test -f "$task_work/gate/checks.log"; then
+            grep -aE 'panic:|no such file|Mod did not survive|active QML differs|missing persisted Mod|DSP profiles changed' "$task_work/gate/checks.log" | head -20 || true
+          fi
           # No image, rootfs, vendor QML, test key, gateway state or generated archive is uploaded.

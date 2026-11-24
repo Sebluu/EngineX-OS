@@ -33,7 +33,7 @@ def add_output_dsp(base, qrc, skin):
     function odOpen(section) {
         if (root.scBoard !== "JC11" || !(odMods & (section === "eq" ? 1 : 2))) return
         odModPanel.active=false
-        odModPanel.source="file:///data/enginex/ui/active/EngineXMods/" + (section === "eq" ? "output-equalizer" : "subharmonic-synth") + "/Panel.qml"
+        odModPanel.source="file:///data/enginex/ui/mods-overlay/EngineXMods/" + (section === "eq" ? "output-equalizer" : "subharmonic-synth") + "/Panel.qml"
         odModPanel.active=true
     }
     Loader {

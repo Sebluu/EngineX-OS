@@ -77,7 +77,7 @@ func main() {
 				for src, dst := range mod.QMLFiles {
 					want, err := os.ReadFile(filepath.Join(mod.Dir, src))
 					must(err)
-					got, err := os.ReadFile(filepath.Join(ui, "active", dst))
+					got, err := os.ReadFile(filepath.Join(ui, "mods-overlay", dst))
 					must(err)
 					if !bytes.Equal(got, want) {
 						panic("active QML differs: " + id + "/" + dst)

@@ -45,7 +45,7 @@ def main():
         raise SystemExit("native UI probe anchor changed")
     panel_probe = '''    function reportDSPPanels() {
         for (const id of ["output-equalizer", "subharmonic-synth"]) {
-            const component = Qt.createComponent("file:///data/enginex/ui/active/EngineXMods/" + id + "/Panel.qml")
+            const component = Qt.createComponent("file:///data/enginex/ui/mods-overlay/EngineXMods/" + id + "/Panel.qml")
             if (component.status !== Component.Ready) {
                 console.warn("SCPROBE error|DSP panel " + id + ": " + component.errorString() + "|")
                 continue
