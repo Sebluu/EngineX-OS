@@ -38,6 +38,7 @@ def add_output_dsp(base, qrc, skin):
     }
     Loader {
         id: odModPanel
+        parent: Overlay.overlay ? Overlay.overlay : uiContainer
         anchors.fill: parent; z: 100000; active: false; asynchronous: true
         onStatusChanged: if(status===Loader.Error)active=false
     }
