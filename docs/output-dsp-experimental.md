@@ -1,5 +1,11 @@
 # Experimental PRIME 4 output DSP and Mods
 
+The [2026-11-24 foundation review](output-dsp-foundation-review.md) describes
+the current latency model, source-review blockers and proposed bounded DSP Mod
+interface. In particular, the control-worker lease is not an independent
+watchdog when that worker itself stops running. No physical audio acceptance
+is implied by the offline tests below.
+
 Source for original PRIME 4 / JC11 only, on the EngineX 5.3.0 base at upstream
 472a414df386ee05fc77eff03cb5146dc15cedcb. No flashable image or approved
 installation is provided. PRIME 4+, G2, other boards and unknown output layouts

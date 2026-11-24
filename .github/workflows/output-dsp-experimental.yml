@@ -22,7 +22,7 @@ jobs:
             gcc -std=c11 -O2 -Wall -Wextra -Werror $flags tools/ui-mod/test_output_dsp_lifecycle.c -lm -o /tmp/od-life
             /tmp/od-life
           done
-          for source in test_output_dsp test_output_dsp_lifecycle test_output_dsp_threads test_output_dsp_rates; do
+          for source in test_output_dsp test_output_dsp_lifecycle test_output_dsp_threads test_output_dsp_rates test_output_dsp_continuity; do
             gcc -std=c11 -O2 -Wall -Wextra -Werror -DOD_FEATURE_EQ=1 -DOD_FEATURE_SUB=1 tools/ui-mod/$source.c -pthread -lm -o /tmp/od-test
             /tmp/od-test
             gcc -std=c11 -O1 -g -fsanitize=address,undefined -fno-omit-frame-pointer -DOD_FEATURE_EQ=1 -DOD_FEATURE_SUB=1 tools/ui-mod/$source.c -pthread -lm -o /tmp/od-san
@@ -91,7 +91,7 @@ jobs:
           qemu-arm -L /usr/arm-linux-gnueabihf /tmp/rt-armv7 selftest
       - name: ARMv7 functional tests (emulation is not a real-time certificate)
         run: |
-          for source in test_output_dsp test_output_dsp_lifecycle test_output_dsp_threads test_output_dsp_rates; do
+          for source in test_output_dsp test_output_dsp_lifecycle test_output_dsp_threads test_output_dsp_rates test_output_dsp_continuity; do
             arm-linux-gnueabihf-gcc -mthumb -march=armv7-a -mfpu=neon -mfloat-abi=hard -std=c11 -O2 -DOD_FEATURE_EQ=1 -DOD_FEATURE_SUB=1 tools/ui-mod/$source.c -pthread -lm -o /tmp/od-armv7
             qemu-arm -L /usr/arm-linux-gnueabihf /tmp/od-armv7
           done
