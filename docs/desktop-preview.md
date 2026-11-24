@@ -5,6 +5,8 @@ inside a separate Linux virtual machine. Open it locally in a browser to try
 the EngineX menus and the optional Output Equalizer, Subharmonic Synthesizer
 and steady-button-LED Mods. No AI model, API key, subscription or token usage
 is involved in running or operating the preview.
+The three Mods are installed and initially enabled only in this VM's private
+preview data; you can change their enabled state there.
 
 The preview is for UI feedback. It does **not** emulate the PRIME 4 hardware,
 bootloader, audio converters, physical controls or LEDs. It cannot certify
@@ -29,8 +31,8 @@ python3 tools/preview/launch.py
 ```
 
 The launcher opens <http://127.0.0.1:8765> once the local viewer is ready.
-The first start downloads a checksum-pinned Ubuntu cloud image, the published
-stock PRIME 4 firmware, published EngineX baseline and build dependencies. The VM compiles the preview
+The first start downloads a checksum-pinned Ubuntu cloud image, the stock
+PRIME 4 firmware, published EngineX baseline and build dependencies. The VM compiles the preview
 tools from the checked-out commit. This initial preparation takes substantially
 longer than later starts; watch progress with a second terminal:
 
@@ -74,7 +76,7 @@ Use `--directory /some/private/directory` for another instance, `--port 9001`
 for a different loopback port, `--memory 3072` or `--cpus 2` for fewer resources,
 and `--no-browser` to open the URL yourself. Supply the same directory and port
 when using `stop` or `logs`. Do not delete the VM disk while QEMU is running.
-To try a new branch version independently, stop the old VM, update the clone
+Each VM is pinned to its source commit and browser port. To try a new branch version independently, stop the old VM, update the clone
 and launch with a fresh `--directory`; existing settings remain with the old VM.
 
 ## Verification scope

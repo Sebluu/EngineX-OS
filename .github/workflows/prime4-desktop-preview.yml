@@ -38,7 +38,7 @@ jobs:
           sudo apt-get install -y --no-install-recommends g++-arm-linux-gnueabihf libc6-dev-armhf-cross qt6-base-dev-tools qemu-user qemu-user-static binfmt-support e2fsprogs zstd python3-pil iproute2
           mkdir "$RUNNER_TEMP/desktop-preview/qt-sdk"
           cd "$RUNNER_TEMP/desktop-preview/qt-sdk"
-          apt-get download qt6-base-dev:armhf qt6-declarative-dev:armhf libqt6test6t64:armhf
+          apt-get download qt6-base-dev:armhf qt6-declarative-dev:armhf
           for archive in *.deb; do dpkg-deb -x "$archive" .; done
           sudo update-binfmts --enable qemu-arm
           grep -q '^flags:.*F' /proc/sys/fs/binfmt_misc/qemu-arm
@@ -47,7 +47,7 @@ jobs:
           set -euo pipefail
           sdk="$RUNNER_TEMP/desktop-preview/qt-sdk/usr/include/arm-linux-gnueabihf/qt6"
           /usr/lib/qt6/libexec/moc -I"$sdk" -I"$sdk/QtCore" -I"$sdk/QtGui" tools/preview/bridge.cpp -o "$RUNNER_TEMP/desktop-preview/bridge.moc"
-          arm-linux-gnueabihf-g++ -I"$RUNNER_TEMP/desktop-preview" -std=c++17 -O2 -Wall -Wextra -Werror -shared -fPIC -pthread -I"$sdk" -I"$sdk/QtCore" -I"$sdk/QtGui" -I"$sdk/QtQuick" -I"$sdk/QtQml" -o "$RUNNER_TEMP/desktop-preview/bridge.so" tools/preview/bridge.cpp -L"$RUNNER_TEMP/desktop-preview/qt-sdk/usr/lib/arm-linux-gnueabihf" -l:libQt6Test.so.6
+          arm-linux-gnueabihf-g++ -I"$RUNNER_TEMP/desktop-preview" -std=c++17 -O2 -Wall -Wextra -Werror -shared -fPIC -pthread -I"$sdk" -I"$sdk/QtCore" -I"$sdk/QtGui" -I"$sdk/QtQuick" -I"$sdk/QtQml" -o "$RUNNER_TEMP/desktop-preview/bridge.so" tools/preview/bridge.cpp
           bash -n tools/preview/*.sh
           python3 -m unittest discover -s tools/preview -p test_preview.py -v
           gofmt -w tools/preview/backend.go
@@ -71,7 +71,7 @@ jobs:
         if: always()
         run: |
           task_work="$RUNNER_TEMP/desktop-preview"
-          if test -f "$task_work/engine.log"; then grep -aE 'PREVIEW_|QmlWarnings|ReferenceError|TypeError|Expected token|is not a type|symbol lookup|error while|Cannot load|Could not|ASSERT|Segmentation|Aborted' "$task_work/engine.log" | tail -30 || true; fi
+          if test -f "$task_work/engine.log"; then grep -aiE 'PREVIEW_|enginexpreview|plugin.*error|cannot load|QmlWarnings|ReferenceError|TypeError|Expected token|is not a type|symbol lookup|error while|Cannot load|Could not|ASSERT|Segmentation|Aborted' "$task_work/engine.log" | tail -30 || true; fi
           if test -f "$task_work/backend.log"; then tail -15 "$task_work/backend.log"; fi
           if test -f "$task_work/runtime/frame.json"; then cat "$task_work/runtime/frame.json"; fi
           # No firmware, vendor files, runtime credentials or compiled binary is uploaded.

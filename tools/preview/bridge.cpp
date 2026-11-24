@@ -9,8 +9,7 @@
 #include <QPointer>
 #include <QQuickWindow>
 #include <QTimer>
-#include <QtTest/qtestmouse.h>
-#include <QtTest/qtestkeyboard.h>
+#include <QtTest/qtestspontaneevent.h>
 #include <cerrno>
 #include <cmath>
 #include <cstdio>
@@ -61,22 +60,27 @@ void dispatch() {
             if (action < 1 || action > 3 || !std::isfinite(x) || !std::isfinite(y) ||
                 x < 0 || y < 0 || x >= target->width() || y >= target->height() ||
                 button < 0 || button > 4 || buttons < 0 || buttons > 7 || (modifiers & ~0x1e000000)) continue;
-            const auto mouseButton = static_cast<Qt::MouseButton>(button);
-            const auto keys = Qt::KeyboardModifiers(static_cast<Qt::KeyboardModifier>(modifiers));
-            const QPoint local(qRound(x), qRound(y));
-            // Qt Quick needs input routed through Qt's window-system event
-            // queue. Public QtTest helpers preserve pointer grabs and focus.
-            if (action == 1) QTest::mousePress(target, mouseButton, keys, local, 0);
-            else if (action == 3) QTest::mouseRelease(target, mouseButton, keys, local, 0);
-            else QTest::mouseMove(target, local, 0);
+            const auto type = action == 1 ? QEvent::MouseButtonPress : action == 3 ? QEvent::MouseButtonRelease : QEvent::MouseMove;
+            const QPointF local(x, y);
+            const QPointF global = target->mapToGlobal(local.toPoint());
+            QMouseEvent event(type, local, local, global, static_cast<Qt::MouseButton>(button),
+                              Qt::MouseButtons(static_cast<Qt::MouseButton>(buttons)),
+                              Qt::KeyboardModifiers(static_cast<Qt::KeyboardModifier>(modifiers)));
+            event.setTimestamp(static_cast<quint64>(clock.elapsed()) + 1);
+            // Use the QtTest header's native-event helper, then notify directly:
+            // sendEvent clears the spontaneous flag that Engine requires.
+            QSpontaneKeyEvent::setSpontaneous(&event);
+            QCoreApplication::instance()->notify(target, &event);
         } else if (sscanf(packet, "K %d %d %d %u", &action, &key, &modifiers, &character) == 4) {
             if ((action != 1 && action != 3) || key < 0 || key > 0x1ffffff || character > 0x10ffff ||
                 (character >= 0xd800 && character <= 0xdfff) || (modifiers & ~0x1e000000)) continue;
             const char32_t point = character;
             const QString text = character ? QString::fromUcs4(&point, 1) : QString();
-            QTest::sendKeyEvent(action == 1 ? QTest::Press : QTest::Release, target,
-                               static_cast<Qt::Key>(key), text,
-                               Qt::KeyboardModifiers(static_cast<Qt::KeyboardModifier>(modifiers)), 0);
+            QKeyEvent event(action == 1 ? QEvent::KeyPress : QEvent::KeyRelease, key,
+                            Qt::KeyboardModifiers(static_cast<Qt::KeyboardModifier>(modifiers)), text);
+            event.setTimestamp(static_cast<quint64>(clock.elapsed()) + 1);
+            QSpontaneKeyEvent::setSpontaneous(&event);
+            QCoreApplication::instance()->notify(target, &event);
         }
     }
 }
@@ -100,12 +104,13 @@ void start() {
     clock.start();
     mkdir(directory, 0700);
     input = socket(AF_UNIX, SOCK_DGRAM | SOCK_NONBLOCK | SOCK_CLOEXEC, 0);
-    if (input < 0) return;
+    if (input < 0) { fprintf(stderr, "PREVIEW_SOCKET_ERROR %s\n", strerror(errno)); return; }
     sockaddr_un address{};
     address.sun_family = AF_UNIX;
     strncpy(address.sun_path, "/tmp/preview/control.sock", sizeof(address.sun_path) - 1);
     unlink(address.sun_path);
     if (bind(input, reinterpret_cast<sockaddr *>(&address), sizeof(address))) {
+        fprintf(stderr, "PREVIEW_BIND_ERROR %s\n", strerror(errno));
         close(input); input = -1; return;
     }
     chmod(address.sun_path, 0600);
@@ -128,6 +133,7 @@ class DesktopPreviewPlugin final : public QGenericPlugin {
 public:
     QObject *create(const QString &name, const QString &) override {
         const char *enabled = getenv("ENGINEX_DESKTOP_PREVIEW");
+        fprintf(stderr, "PREVIEW_PLUGIN_CREATE Qt=%s enabled=%d marker=%d\n", qVersion(), enabled && !strcmp(enabled,"1"), access("/run/enginex-desktop-preview", F_OK)==0);
         if (name != QStringLiteral("enginexpreview") || !enabled || strcmp(enabled, "1") ||
             access("/run/enginex-desktop-preview", F_OK) || strncmp(qVersion(), "6.", 2)) return nullptr;
         QTimer::singleShot(0, QCoreApplication::instance(), start);

@@ -60,7 +60,27 @@ def main():
             raise RuntimeError('Engine restart did not produce a fresh framebuffer')
         request('/api/stop',{})
         assert process.wait(timeout=90)==0, 'VM did not shut down cleanly'
-        print('PASS full local VM: cloud-init setup, original Engine framebuffer, browser input endpoint, feedback, application restart and clean shutdown')
+        # Reuse the same disk and seed: the enabled service must start after a
+        # real guest shutdown, without rerunning the first-install bootstrap.
+        process=subprocess.Popen(command,stdout=log,stderr=subprocess.STDOUT)
+        deadline=time.monotonic()+240
+        while time.monotonic()<deadline:
+            if process.poll() is not None:
+                raise RuntimeError('second VM boot exited early')
+            try:
+                status=json.loads(request('/api/status'))
+                if status.get('frame',{}).get('width')==1280:
+                    break
+            except OSError:
+                pass
+            time.sleep(2)
+        else:
+            raise RuntimeError('original Engine did not return after a full VM restart')
+        restored=json.loads(request('/api/feedback',{'note':'second VM boot'}))
+        assert restored['sourceCommit']==report['sourceCommit']
+        request('/api/stop',{})
+        assert process.wait(timeout=90)==0, 'second VM shutdown failed'
+        print('PASS full local VM: first-install cloud-init, original Engine framebuffer, browser input endpoint, feedback, application restart, full guest shutdown and second boot')
     finally:
         if process.poll() is None:
             subprocess.run([*command,'stop'],check=False,timeout=10)

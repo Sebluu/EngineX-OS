@@ -34,7 +34,7 @@ def cloud_config(archive, commit, port=8765):
     unit = '''[Unit]
 Description=Local EngineX UI preview
 Wants=network-online.target
-After=network-online.target cloud-final.service
+After=network-online.target
 [Service]
 Type=simple
 ExecStart=/bin/bash /opt/enginex-preview-source/tools/preview/guest-start.sh
@@ -134,7 +134,9 @@ def main():
     try: fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
     except BlockingIOError: parser.exit(2,f'Die Vorschau läuft bereits: http://127.0.0.1:{args.port}\n')
     try:
-        with socket.socket() as probe: probe.bind(('127.0.0.1',args.port))
+        with socket.socket() as probe:
+            probe.setsockopt(socket.SOL_SOCKET,socket.SO_REUSEADDR,1)
+            probe.bind(('127.0.0.1',args.port))
     except OSError: parser.exit(2,'Der Browser-Port ist bereits belegt. Wähle einen anderen mit --port.\n')
     base=directory/'ubuntu-noble-20261017.qcow2'
     if not base.exists():
@@ -151,11 +153,16 @@ def main():
     if not disk.exists():
         subprocess.run(['qemu-img','create','-f','qcow2','-F','qcow2','-b',str(base),str(disk),'24G'],check=True)
     commit=subprocess.check_output(['git','rev-parse','HEAD'],cwd=ROOT,text=True).strip()
+    identity={'commit':commit,'port':args.port}
+    pin=directory/'preview.json'
+    if pin.exists() and json.loads(pin.read_text()) != identity:
+        parser.exit(2,'Diese VM gehört zu einem anderen Quellstand oder Port. Starte die neue Vorschau mit einem frischen --directory.\n')
     archive=subprocess.check_output(['git','archive','--format=tar.gz','HEAD','--',*SOURCE_PATHS],cwd=ROOT)
     if len(archive)>64*1024*1024: parser.exit(1,'Der Vorschau-Quellstand ist unerwartet groß.\n')
     (directory/'user-data').write_text(cloud_config(archive,commit,args.port))
     (directory/'meta-data').write_text(json.dumps({'instance-id':'enginex-preview-'+commit,'local-hostname':'enginex-preview'}))
     subprocess.run(['cloud-localds',str(directory/'seed.img'),str(directory/'user-data'),str(directory/'meta-data')],check=True)
+    pin.write_text(json.dumps(identity))
     command=qemu_command(directory,args.port,args.memory,args.cpus,args.accel)
     print(f'Lokale VM startet. Beim ersten Start werden Firmware und Werkzeuge vorbereitet.\nBrowser: http://127.0.0.1:{args.port}\nStoppen: Strg+C',flush=True)
     if 'tcg,thread=multi' in command: print('Softwareemulation aktiv; der erste Start kann deutlich länger dauern.',flush=True)

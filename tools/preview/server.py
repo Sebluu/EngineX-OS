@@ -107,7 +107,11 @@ class Handler(BaseHTTPRequestHandler):
             name, kind = {'/': ('index.html', 'text/html; charset=utf-8'), '/app.js': ('app.js', 'text/javascript; charset=utf-8'), '/style.css': ('style.css', 'text/css; charset=utf-8')}[path]
             self.send(200, (HERE / name).read_bytes(), kind)
         elif path == '/api/status':
-            self.send(200, json.dumps({'uiOnly': True, 'frame': self.server.meta()}).encode())
+            meta=self.server.meta()
+            try: state=(self.server.runtime/'engine.state').read_text().strip()
+            except OSError: state='starting'
+            state='stopped' if state=='stopped' else 'running' if meta else 'starting'
+            self.send(200, json.dumps({'uiOnly': True, 'frame': meta, 'engine': state}).encode())
         elif path == '/frame.png':
             try: self.send(200, (self.server.runtime / 'frame.png').read_bytes(), 'image/png')
             except OSError: self.send(503)

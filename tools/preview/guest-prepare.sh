@@ -16,7 +16,7 @@ grep -q '^flags:.*F' /proc/sys/fs/binfmt_misc/qemu-arm
 cd /var/lib/enginex-preview/work
 mkdir -p qt-sdk
 cd qt-sdk
-apt-get download qt6-base-dev:armhf qt6-declarative-dev:armhf libqt6test6t64:armhf
+apt-get download qt6-base-dev:armhf qt6-declarative-dev:armhf
 for archive in *.deb; do dpkg-deb -x "$archive" .; done
 cd /var/cache/enginex-preview
 image=PRIME4-5.3.0.5-r1.img

@@ -65,8 +65,6 @@ echo f > "$root/proc/irq/41/smp_affinity"
 echo 0-3 > "$root/proc/irq/41/smp_affinity_list"
 mkdir -p "$root/tmp/preview/plugins/generic"
 cp "$work/bridge.so" "$root/tmp/preview/plugins/generic/libenginexpreview.so"
-mkdir -p "$root/tmp/preview/lib"
-cp -L "$work/qt-sdk/usr/lib/arm-linux-gnueabihf/libQt6Test.so.6" "$root/tmp/preview/lib/"
 if [ "$PREVIEW_MODE" = smoke ]; then
     for pack in "$work/data/enginex/ui/packs/"*; do
         [ -d "$pack" ] || continue
@@ -91,40 +89,47 @@ done
 run /etc/enginex/engine-ui-guard pre >> "$work/prepare.log" 2>&1
 start_engine() {
 rm -f "$work/runtime/frame.json" "$work/runtime/frame.png" "$work/runtime/restart.request"
+echo starting > "$work/runtime/engine.state"
 chroot "$root" /usr/bin/env -i PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
-    HOME=/tmp/home LD_LIBRARY_PATH=/usr/qt/lib:/tmp/preview/lib QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software \
+    HOME=/tmp/home LD_LIBRARY_PATH=/usr/qt/lib QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software \
     ENGINEX_DESKTOP_PREVIEW=1 MALLOC_ARENA_MAX=1 \
     ENGINEX_PREVIEW_SMOKE="$([ "$PREVIEW_MODE" = smoke ] && echo 1 || true)" \
+    QT_DEBUG_PLUGINS="$([ "$PREVIEW_MODE" = smoke ] && echo 1 || echo 0)" \
     QT_PLUGIN_PATH=/tmp/preview/plugins:/usr/lib/plugins QT_QPA_GENERIC_PLUGINS=enginexpreview \
     LD_PRELOAD=/etc/enginex/libengine-ui-hook.so \
     /usr/Engine/Engine -d0 > "$work/engine.log" 2>&1 &
 engine=$!
 }
 stop_engine() {
+    [ -n "${engine:-}" ] || return 0
     kill -TERM "$engine" 2>/dev/null || true
     for attempt in $(seq 40); do kill -0 "$engine" 2>/dev/null || break; sleep .25; done
     kill -KILL "$engine" 2>/dev/null || true
     wait "$engine" 2>/dev/null || true
+    engine=
+    echo stopped > "$work/runtime/engine.state"
     run /etc/enginex/engine-ui-guard stop >> "$work/prepare.log" 2>&1 || true
 }
 start_engine
 trap 'stop_engine; kill -TERM "$backend" 2>/dev/null || true' EXIT
 trap 'exit 0' TERM INT
 if [ "$PREVIEW_MODE" = smoke ]; then
-    for attempt in $(seq 360); do
+    for attempt in $(seq 120); do
         if [ -s "$work/runtime/frame.json" ]; then break; fi
         kill -0 "$engine" || { tail -20 "$work/engine.log"; exit 1; }
         sleep .5
     done
+    [ -s "$work/runtime/frame.json" ] || { tail -35 "$work/engine.log"; exit 1; }
     python3 "$PREVIEW_REPO/tools/preview/test_live_bridge.py" "$work/runtime" "$work/engine.log"
 else
-    while kill -0 "$engine" 2>/dev/null; do
+    while :; do
         if [ -e "$work/runtime/restart.request" ]; then
             stop_engine
             run /etc/enginex/engine-ui-guard pre >> "$work/prepare.log" 2>&1
             start_engine
+        elif [ -n "$engine" ] && ! kill -0 "$engine" 2>/dev/null; then
+            stop_engine
         fi
         sleep .25
     done
-    wait "$engine"
 fi
