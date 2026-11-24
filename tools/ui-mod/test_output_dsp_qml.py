@@ -77,6 +77,14 @@ import QtTest 1.2
 TestCase {
     name: "DSPSettings"
     when: windowShown
+    function visualChild(item,name) {
+        if(item.objectName===name)return item
+        for(var i=0;i<item.children.length;i++) {
+            var found=visualChild(item.children[i],name)
+            if(found)return found
+        }
+        return null
+    }
     function test_panel_above_settings() {
         var component=Qt.createComponent("Settings.qml")
         compare(component.status,Component.Ready,component.errorString())
@@ -96,6 +104,18 @@ TestCase {
             var closeButton=findChild(win.panelLoader.item,"outputDSPClose")
             verify(closeButton !== null,"DSP close button exists")
             wait(300)
+            var apply=visualChild(popup.contentItem,"outputDSPApply")
+            verify(apply!==null,"DSP Apply control exists")
+            var before=apply.mapToItem(win.contentItem,0,0)
+            popup.contentItem.dirty=true
+            wait(300)
+            var after=apply.mapToItem(win.contentItem,0,0)
+            verify(Math.abs(after.x-before.x)<1,"DSP_APPLY_MOVED_WHEN_DIRTY")
+            if(popup.contentItem.section==="sub") {
+                var slider=visualChild(popup.contentItem,"outputDSPSubSlider0")
+                verify(slider!==null&&slider.height>=36,"DSP_SUB_TOUCH_AREA_TOO_SMALL")
+            }
+            popup.contentItem.dirty=false
             mouseClick(closeButton)
             tryCompare(win.panelLoader,"active",false,1000)
             verify(win.settingsDrawer.visible,"Settings stays accessible after closing DSP")

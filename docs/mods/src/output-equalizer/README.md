@@ -8,7 +8,9 @@ does not add DSP or change firmware. This source is not approved for deck instal
 After explicit Mod Hub activation, open Settings → Mixer → Output Equalizer.
 Eight bands and an optional highpass have separate Main, Booth, Phones and Zone
 profiles. All processing defaults off. Advanced controls expose frequency and Q.
-The graph previews the digital filter response at 48 kHz.
+The graph previews the digital filter response at 48 kHz. Version 0.1.1 keeps
+switch labels readable against the dark panel background and keeps Apply in
+the same position while edits are unsaved.
 
 The loader owns activation, upgrades, removal and quarantine. The core requires
 a renewable three-second lease tied to the current Linux boot identity.
