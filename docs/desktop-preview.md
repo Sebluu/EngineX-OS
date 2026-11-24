@@ -17,6 +17,12 @@ with Mesa rendering on the VM's CPU. This renders custom geometry and shader
 effects which the simpler Qt raster backend omitted. It can respond slowly;
 the host GPU is not passed into the VM.
 
+The preview captures the completed OpenGL render pass and encodes its PNG on
+the VM's native x86 CPU. It avoids a second ARM render pass and ARM PNG
+compression. Browser input coalesces waiting drag positions while preserving
+press/release ordering. The displayed image age describes capture/transport
+freshness; it is not a measurement of audio or physical-device latency.
+
 ![Local browser preview with CPU-rendered OpenGL](assets/screenshots/desktop-preview-opengl.png)
 
 ## Start on Linux
@@ -47,8 +53,23 @@ python3 tools/preview/launch.py logs
 Use the mouse to click and drag the Engine screen, and click inside the image
 before typing. Skip Wi-Fi/account setup; this preview's Engine process has no
 internet or LAN access. Access EQ and synth through Engine's mixer settings.
+On a touchscreen, tap and drag directly inside the image. Gestures there belong
+to Engine; scrolling the surrounding page remains available outside it. The
+current bridge supports one active finger. Press Fullscreen for more space.
 The browser's **Engine neu starten** button restarts only the application.
 The settings and Mod state remain in the VM's private data directory.
+
+This branch includes the combined `test/all-features` changes. Close onboarding
+with its X, then swipe down from Engine's top toolbar (or use its gear icon) to
+open Control Center and Settings. Open **Settings → Mixer → Output Equalizer → Open** or
+**Settings → Mixer → Subharmonic Synthesizer → Open**. The 3 kHz band and the
+10 Hz–22 kHz response graph are in Output Equalizer. Select Main, Booth, Phones
+or Zone, then use Apply to save. PRIME 4 Steady LEDs is included and initially
+enabled; the browser has no physical controller LEDs to display its effect.
+Updating an existing preview also upgrades its original EQ/SUB Mod packages
+to 0.1.1 through the Mod manager, retaining their enabled state and profiles.
+
+![SUB Mod controls in the original ARM Engine, with simulated audio capabilities](assets/screenshots/desktop-preview-subharmonic.png)
 
 Stop with **Ctrl+C** in the launch terminal, or:
 
@@ -107,10 +128,19 @@ These checks do not replace testing an actual PRIME 4.
 
 The complete Linux VM setup was also exercised from a fresh disk, including
 the browser HTTP interface, feedback export, application restart, clean VM
-shutdown and a second boot. The upgrade test starts with the previous raster
-preview, retains non-default DSP settings on the same disk, installs the new
-renderer and performs another full shutdown and ordinary start. Screenshots
+shutdown and a second boot. The upgrade test starts with the previously
+installed OpenGL preview
+(`394efce`), retains non-default DSP settings on the same disk, installs the
+new capture pipeline and performs another full shutdown and ordinary start.
+Screenshots
 wait for the application UI rather than accepting the startup splash, and
 navigation skips Wi-Fi/profile setup to capture the library/onboarding view.
+The browser check sends real Chrome touch events, verifies that gestures inside
+the image do not scroll the page and that scrolling outside still works, and
+requires a touch to change an actual Engine control. The native Engine test
+opens both optional DSP panels and waits for their SDK settings, complete
+delegates and stable positions. It rejects the old small SUB slider touch
+areas, then drags the real strength slider and taps its current Apply button
+position, requiring the value to be saved through the SDK.
 
-[OpenGL, navigation and VM upgrade verification](https://github.com/Sebluu/EngineX-OS/actions/runs/45446366625)
+[Touch, Mod controls, persistence and VM upgrade verification](https://github.com/Sebluu/EngineX-OS/actions/runs/45467140293)

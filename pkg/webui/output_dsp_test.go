@@ -81,7 +81,11 @@ func TestOutputDSPModArchiveLifecycle(t *testing.T) {
 	}
 	mgr := s.modsManager()
 	for _, id := range []string{"output-equalizer", "subharmonic-synth"} {
-		f, err := os.Open(filepath.Join(out, id+"-0.1.0.tar.gz"))
+		archives, err := filepath.Glob(filepath.Join(out, id+"-*.tar.gz"))
+		if err != nil || len(archives) != 1 {
+			t.Fatalf("expected one built archive for %s: %v %v", id, archives, err)
+		}
+		f, err := os.Open(archives[0])
 		if err != nil {
 			t.Fatal(err)
 		}
