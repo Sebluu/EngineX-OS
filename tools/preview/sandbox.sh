@@ -66,6 +66,7 @@ echo 0-3 > "$root/proc/irq/41/smp_affinity_list"
 mkdir -p "$root/tmp/preview/plugins/generic"
 cp "$work/bridge.so" "$root/tmp/preview/plugins/generic/libenginexpreview.so"
 if [ "$PREVIEW_MODE" = smoke ]; then
+    cp "$PREVIEW_REPO/tools/preview/smoke-target.qml" "$root/tmp/preview/smoke-target.qml"
     for pack in "$work/data/enginex/ui/packs/"*; do
         [ -d "$pack" ] || continue
         probe="$pack/Skins/Common/Items/QmlWarnings.qml"

@@ -8,6 +8,7 @@
 #include <QMouseEvent>
 #include <QPointer>
 #include <QQuickWindow>
+#include <QQuickItem>
 #include <QTimer>
 #include <QtTest/qtestspontaneevent.h>
 #include <cerrno>
@@ -39,13 +40,17 @@ QElapsedTimer clock;
 QPointer<QQuickWindow> selected;
 
 QQuickWindow *window() {
-    if (selected && selected->isVisible()) return selected;
+    QQuickWindow *preferred = qobject_cast<QQuickWindow *>(QGuiApplication::modalWindow());
+    if (!preferred) preferred = qobject_cast<QQuickWindow *>(QGuiApplication::focusWindow());
+    if (preferred && (!preferred->isVisible() || preferred->width() <= 100 || preferred->height() <= 100)) preferred = nullptr;
+    if (selected && selected->isVisible() && (!preferred || selected == preferred)) return selected;
     QQuickWindow *largest = nullptr;
     for (QWindow *candidate : QGuiApplication::allWindows()) {
         auto *quick = qobject_cast<QQuickWindow *>(candidate);
         if (quick && quick->isVisible() && quick->width() > 100 && quick->height() > 100 &&
             (!largest || quick->width() * quick->height() > largest->width() * largest->height())) largest = quick;
     }
+    if (preferred) largest = preferred;
     selected = largest;
     if (largest) {
         largest->resize(1280, 800);
@@ -73,6 +78,14 @@ void dispatch() {
             const auto type = action == 1 ? QEvent::MouseButtonPress : action == 3 ? QEvent::MouseButtonRelease : QEvent::MouseMove;
             const QPointF local(x, y);
             const QPointF global = target->mapToGlobal(local.toPoint());
+            const char *smoke = getenv("ENGINEX_PREVIEW_SMOKE");
+            if (action == 1 && smoke && *smoke) {
+                auto *probe = target->findChild<QQuickItem *>(QStringLiteral("enginex-preview-input-probe"));
+                fprintf(stderr, "PREVIEW_INPUT_TARGET window=%p focus=%p modal=%p probe=%p enabled=%d visible=%d\n",
+                    static_cast<void *>(target), static_cast<void *>(QGuiApplication::focusWindow()),
+                    static_cast<void *>(QGuiApplication::modalWindow()), static_cast<void *>(probe),
+                    probe && probe->isEnabled(), probe && probe->isVisible());
+            }
             if (qt_handleMouseEvent) {
                 qt_handleMouseEvent(target, local, global,
                     Qt::MouseButtons(static_cast<Qt::MouseButton>(buttons)),
