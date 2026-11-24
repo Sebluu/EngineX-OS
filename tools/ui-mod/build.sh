@@ -28,7 +28,7 @@ if [ -n "$(printf '%s' "$disable" | tr -d ' ')" ]; then
     echo "hook features off in this build: $list" >&2
 fi
 "${cross}gcc" -O2 -Wall -Wextra -Werror=missing-field-initializers -shared -fPIC -funwind-tables -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=0 "$@" \
-    -ffunction-sections -fdata-sections -Wl,--gc-sections -Wl,-z,now -Wl,-z,defs -Wl,-z,max-page-size=4096 -o "$out" engine_ui_hook.c -ldl -lpthread
+    -ffunction-sections -fdata-sections -Wl,--gc-sections -Wl,-z,now -Wl,-z,defs -Wl,-z,max-page-size=4096 -o "$out" engine_ui_hook.c -ldl -lpthread -lm
 "${cross}strip" "$out"
 if "${cross}readelf" -V "$out" | grep -E 'GLIBC_2\.(39\.|[4-9][0-9])'; then
     echo "needs glibc newer than the target's 2.39" >&2

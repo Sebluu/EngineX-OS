@@ -42,6 +42,8 @@
 #endif
 #include "dsp_smooth.h"
 #include "master_limiter.h"
+#include "output_dsp.h"
+static int od_allowed;
 #include "echo_out.h"
 #include "pioneer_master.h"
 #include "pioneer_ms.h"
@@ -500,6 +502,16 @@ static void fx_selector_poll(void) {
 }
 
 static void lim_poll_once(void) {
+    if (OD_FEATURE_EQ || OD_FEATURE_SUB) {
+        static int checked;
+        if (!checked) {
+            char code[8] = {0};
+            FILE *f = fopen(product_code_path, "r");
+            if (f) { if (fgets(code, sizeof code, f)) { checked = 1; __atomic_store_n(&od_allowed, !strncmp(code,"JC11",4), __ATOMIC_RELEASE); } fclose(f); }
+        }
+        if (__atomic_load_n(&od_allowed, __ATOMIC_ACQUIRE))
+            od_poll(UI_ROOT "/output-dsp-v1.conf", __atomic_load_n(&master_rate, __ATOMIC_ACQUIRE));
+    }
     fx_selector_poll();
     cfx_poll();
     static struct stat previous;
@@ -1589,14 +1601,19 @@ static uint32_t hook_master_output(void *host, void *context, int in_channels, c
             if (out[ch]) sc_hifi_planar(&master_hifi[ch / 2], out[ch], ch + 1 < out_channels ? out[ch + 1] : NULL, (unsigned)frames, hifi);
     int gain = __atomic_load_n(&gain_enabled, __ATOMIC_RELAXED);
     unsigned rate = __atomic_load_n(&master_rate, __ATOMIC_ACQUIRE);
+    unsigned od_mask = 0;
+    if ((OD_FEATURE_EQ || OD_FEATURE_SUB) && __atomic_load_n(&od_allowed, __ATOMIC_ACQUIRE) && out && out_channels == 10 && frames > 0)
+        for (unsigned p = 0; p < 4; ++p)
+            if (od_process(p, out[p*2], out[p*2+1], (unsigned)frames, rate)) od_mask |= 1u << p;
     // Auto-Gain (#64) always runs into the limiter, so a boost never clips.
-    if ((gain || __atomic_load_n(&lim_enabled, __ATOMIC_RELAXED)) && out && frames > 0)
+    if ((od_mask || gain || __atomic_load_n(&lim_enabled, __ATOMIC_RELAXED)) && out && frames > 0)
         for (int ch = 0; ch < out_channels && ch < 16; ch += 2) {
             float *r = ch + 1 < out_channels ? out[ch + 1] : NULL;
             if (gain) {
                 sc_gain_set_rate(&master_gain[ch / 2], rate);
                 sc_gain_planar(&master_gain[ch / 2], out[ch], r, (unsigned)frames);
             }
+            if (!gain && !__atomic_load_n(&lim_enabled, __ATOMIC_RELAXED) && !(od_mask & (1u << (ch / 2)))) continue;
             sc_lim_set_rate(&master_lim[ch / 2], rate);
             sc_lim_planar(&master_lim[ch / 2], out[ch], r, (unsigned)frames);
         }
