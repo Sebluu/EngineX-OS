@@ -103,6 +103,8 @@ TestCase {
             compare(win.testClicks,2,"Settings accepts input after DSP closes")
             win.settingsDrawer.close()
             tryCompare(win.settingsDrawer,"position",0,5000)
+            tryCompare(win.settingsDrawer,"visible",false,5000)
+            wait(100)
             mouseClick(win.mainButton)
             compare(win.testClicks,3,"Main UI accepts input after Settings closes")
         } finally {
