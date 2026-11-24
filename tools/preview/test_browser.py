@@ -4,6 +4,7 @@ Only the framebuffer and Engine's input socket are fixtures. The local HTTP
 server, frontend, Chrome input processing and CSS are the production preview.
 """
 import json
+import os
 from pathlib import Path
 import shutil
 import socket
@@ -20,7 +21,7 @@ def main():
     chrome = shutil.which('google-chrome') or shutil.which('chromium')
     if not chrome:
         raise SystemExit('the disposable browser test requires Chrome')
-    with tempfile.TemporaryDirectory(prefix='enginex-browser-') as directory:
+    with tempfile.TemporaryDirectory(prefix='enginex-browser-', dir=os.environ.get('RUNNER_TEMP')) as directory:
         runtime = Path(directory)
         Image.new('RGB', (1280, 800), '#101820').save(runtime / 'frame.png')
         session = str(uuid.uuid4())

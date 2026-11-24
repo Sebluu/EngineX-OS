@@ -9,16 +9,18 @@ const profile=join(directory,'touch-browser');await mkdir(profile,{recursive:tru
 const child=spawn(chrome,['--headless','--no-sandbox','--disable-gpu','--disable-dev-shm-usage',
   '--window-size=1600,1000',
   '--disable-background-networking','--no-first-run','--remote-debugging-address=127.0.0.1',
-  '--remote-debugging-port=0','--user-data-dir='+profile,'about:blank'],{stdio:'ignore'});
+  '--remote-debugging-port=0','--user-data-dir='+profile,'about:blank'],{stdio:['ignore','ignore','pipe']});
+let chromeErrors='';child.stderr.on('data',chunk=>{chromeErrors=(chromeErrors+chunk.toString()).slice(-4000);});
 const delay=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 let ws;
 try{
   let port;
-  for(let i=0;i<200;i++){
+  for(let i=0;i<400;i++){
     try{port=Number((await readFile(join(profile,'DevToolsActivePort'),'utf8')).split('\n')[0]);if(port)break;}catch{}
+    if(child.exitCode!==null)break;
     await delay(50);
   }
-  assert.ok(port,'Chrome DevTools did not start');
+  assert.ok(port,'Chrome DevTools did not start: '+chromeErrors);
   const tab=await(await fetch(`http://127.0.0.1:${port}/json/new?http://127.0.0.1:8765`,{method:'PUT'})).json();
   ws=new WebSocket(tab.webSocketDebuggerUrl);
   await new Promise((resolve,reject)=>{ws.addEventListener('open',resolve,{once:true});ws.addEventListener('error',reject,{once:true});});
