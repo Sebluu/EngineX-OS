@@ -45,6 +45,7 @@ bool touching = false;
 QPointer<QQuickWindow> selected;
 QString expectedPanel;
 bool panelReported = false;
+bool panelDiagnosed = false;
 
 // The firmware uses custom scene-graph geometry. Qt's raster backend silently
 // omits those nodes. CI must exercise one, in the real Engine scene, to catch it.
@@ -52,6 +53,7 @@ class RenderProbe final : public QQuickItem {
 public:
     explicit RenderProbe(QQuickItem *parent) : QQuickItem(parent) {
         setFlag(ItemHasContents, true);
+        setObjectName(QStringLiteral("enginex-preview-render-probe"));
         setX(200); setY(20); setWidth(120); setHeight(120); setZ(100000000);
     }
     QSGNode *updatePaintNode(QSGNode *old, UpdatePaintNodeData *) override {
@@ -159,6 +161,7 @@ void dispatch() {
         } else if (packet[0] == 'D') {
             const char *smoke = getenv("ENGINEX_PREVIEW_SMOKE");
             if (!smoke || !*smoke) continue;
+            if (auto *geometry = target->findChild<QQuickItem *>(QStringLiteral("enginex-preview-render-probe"))) geometry->setVisible(false);
             if (auto *probe = target->findChild<QObject *>(QStringLiteral("enginex-preview-smoke-popup")))
                 QMetaObject::invokeMethod(probe, "close", Qt::DirectConnection);
             for (QObject *panel : uiObjects(target))
@@ -172,7 +175,7 @@ void dispatch() {
             for (QObject *object : uiObjects(target)) {
                 if (object->metaObject()->indexOfMethod("odOpen(QVariant)") < 0) continue;
                 fprintf(stderr, "PREVIEW_MOD_HOST board=%s mods=%d\n", qPrintable(object->property("scBoard").toString()), object->property("odMods").toInt());
-                expectedPanel = section; panelReported = false;
+                expectedPanel = section; panelReported = false; panelDiagnosed = false;
                 QMetaObject::invokeMethod(object, "odOpen", Qt::DirectConnection, Q_ARG(QVariant, QVariant(section)));
                 break;
             }
@@ -206,9 +209,45 @@ void requestFrame() {
             auto *content = popup->property("contentItem").value<QQuickItem *>();
             if (!popup->property("visible").toBool() || !content || content->property("section").toString() != expectedPanel) continue;
             if (content->property("message").toString() == QStringLiteral("Ready")) {
-                fprintf(stderr, "PREVIEW_MOD_PANEL_READY section=%s\n", qPrintable(expectedPanel));
-                panelReported = true;
-                break;
+                bool first = false, second = false;
+                QList<QQuickItem *> items{content};
+                for (qsizetype i = 0; i < items.size(); ++i) items.append(items[i]->childItems());
+                QQuickItem *slider = nullptr, *apply = nullptr;
+                for (QQuickItem *item : items) {
+                    const QString text = item->property("text").toString();
+                    const QString kind = QString::fromLatin1(item->metaObject()->className());
+                    const QPointF scene = item->mapToScene(QPointF());
+                    const bool sized = item->isVisible() && item->width() > 1 && item->height() > 1 &&
+                        scene.x() >= 0 && scene.y() >= 0 && scene.x() + item->width() <= target->width() && scene.y() + item->height() <= target->height();
+                    if (sized && item->objectName() == QStringLiteral("outputDSPSubSlider0")) slider = item;
+                    if (sized && item->objectName() == QStringLiteral("outputDSPApply")) apply = item;
+                    if (expectedPanel == QStringLiteral("sub")) {
+                        if (text == QStringLiteral("Strength %")) first = sized;
+                        if (text == QStringLiteral("Maximum sub frequency Hz")) second = sized;
+                    } else {
+                        if (text == QStringLiteral("3000 Hz")) first = sized;
+                        if (text.startsWith(QStringLiteral("Highpass"))) second = sized;
+                    }
+                    if (!panelDiagnosed && (text.contains(QStringLiteral("Strength")) || text.contains(QStringLiteral("Maximum")) ||
+                        kind.contains(QStringLiteral("Layout")) || kind.contains(QStringLiteral("Repeater")))) {
+                        const QPointF point = item->mapToScene(QPointF());
+                        fprintf(stderr, "PREVIEW_MOD_LAYOUT kind=%s text=%s visible=%d xy=%.1f,%.1f size=%.1f,%.1f implicit=%.1f,%.1f count=%d\n",
+                            qPrintable(kind), qPrintable(text), item->isVisible(), point.x(), point.y(), item->width(), item->height(),
+                            item->implicitWidth(), item->implicitHeight(), item->property("count").toInt());
+                    }
+                }
+                panelDiagnosed = true;
+                if (first && second && (expectedPanel != QStringLiteral("sub") || (slider && apply))) {
+                    if (expectedPanel == QStringLiteral("sub") && slider && apply) {
+                        const QPointF start = slider->mapToScene(QPointF(slider->width() * .3, slider->height() * .5));
+                        const QPointF end = slider->mapToScene(QPointF(slider->width() * .8, slider->height() * .5));
+                        const QPointF save = apply->mapToScene(QPointF(apply->width() * .5, apply->height() * .5));
+                        fprintf(stderr, "PREVIEW_SUB_CONTROLS %.2f %.2f %.2f %.2f %.2f %.2f\n", start.x(), start.y(), end.x(), end.y(), save.x(), save.y());
+                    }
+                    fprintf(stderr, "PREVIEW_MOD_PANEL_READY section=%s\n", qPrintable(expectedPanel));
+                    panelReported = true;
+                    break;
+                }
             }
         }
     }

@@ -85,6 +85,16 @@ class PreviewServer(ThreadingHTTPServer):
             result['sourceCommit'] = str(build.get('sourceCommit', ''))[:64]
         except (OSError, ValueError):
             pass
+        versions = {}
+        for mod_id in ('output-equalizer', 'subharmonic-synth', 'prime4-steady-leds'):
+            try:
+                manifest = json.loads((self.data / 'enginex/mods' / mod_id / 'mod.json').read_text())
+                version = manifest.get('version', '')
+                if isinstance(version, str) and len(version) <= 32:
+                    versions[mod_id] = version
+            except (OSError, ValueError):
+                pass
+        result['modVersions'] = versions
         try:
             text = (self.data / 'enginex/ui/output-dsp-v1.conf').read_text()
             values = [float(n) for n in text.split()]

@@ -2,7 +2,7 @@ name: PRIME 4 desktop preview
 on:
   push:
     branches: [feature/desktop-preview]
-    paths: ['.github/workflows/prime4-desktop-preview.yml', 'tools/preview/**']
+    paths: ['.github/workflows/prime4-desktop-preview.yml', 'tools/preview/**', 'tools/ui-mod/output_dsp*', 'tools/mods/build_output_dsp_mods.py']
   workflow_dispatch:
 permissions:
   contents: read
@@ -55,6 +55,7 @@ jobs:
           python3 -m unittest discover -s tools/preview -p test_preview.py -v
           python3 -m unittest discover -s tools/preview -p test_frames.py -v
           node --test tools/preview/test_frontend.mjs
+          python3 -m unittest discover -s tools/mods -p test_output_dsp_mods.py -v
           python3 tools/preview/test_browser.py
           gofmt -w tools/preview/backend.go
           GOOS=linux GOARCH=arm GOARM=7 CGO_ENABLED=0 go build -trimpath -o "$RUNNER_TEMP/desktop-preview/backend" tools/preview/backend.go
@@ -72,6 +73,14 @@ jobs:
           mkdir -p "$task_work/runtime"
           GITHUB_ACTIONS=true bash tools/preview/mesa.sh "$task_work"
           GITHUB_ACTIONS=true bash tools/preview/build.sh "$task_work"
+          GITHUB_ACTIONS=true python3 tools/preview/test_panel_regression.py stage "$task_work"
+          if sudo env "PATH=$PATH" "GITHUB_ACTIONS=true" bash tools/preview/sandbox.sh "$task_work" smoke > "$task_work/old-panel-check.log" 2>&1; then
+            echo 'The control geometry regression accepted the old zero-height SUB rows' >&2
+            exit 1
+          fi
+          grep -q 'could not open the sub Mod settings panel' "$task_work/old-panel-check.log" || { tail -30 "$task_work/old-panel-check.log"; exit 1; }
+          echo 'PASS original Engine regression rejects the old SUB row geometry'
+          sudo env "GITHUB_ACTIONS=true" python3 tools/preview/test_panel_regression.py restore "$task_work"
           sudo env "PATH=$PATH" "GITHUB_ACTIONS=true" bash tools/preview/sandbox.sh "$task_work" smoke
           sudo env "PATH=$PATH" "GITHUB_ACTIONS=true" bash tools/preview/sandbox.sh "$task_work" smoke
       - name: Bounded diagnostic evidence

@@ -62,7 +62,6 @@ state = dsp({'section':'eq','pair':0,'values':values})
 values = list(state['profiles'][0]); values[2] = 1; values[3] = 35
 state = dsp({'section':'sub','pair':0,'values':values})
 assert state['profiles'][0][0] == 1 and state['profiles'][0][2] == 1 and state['profiles'][0][28] == -3
-saved.write_text(json.dumps(state['profiles']))
 print('PASS preview-only DSP capabilities and persisted EQ/SUB parameter edits')
 
 for section in ('eq', 'sub'):
@@ -83,3 +82,31 @@ for section in ('eq', 'sub'):
         time.sleep(.25)
     else:
         raise SystemExit('the original Engine could not open the '+section+' Mod settings panel')
+
+# Exercise the actual Mod controls, not only its HTTP endpoint.
+controls=re.search(r'PREVIEW_SUB_CONTROLS ([0-9.]+) ([0-9.]+) ([0-9.]+) ([0-9.]+) ([0-9.]+) ([0-9.]+)',log.read_text(errors='replace'))
+assert controls, 'visible SUB slider and Apply button were not found'
+sx,sy,ex,ey,ax,ay=map(float,controls.groups())
+def pointer(action,x,y):
+    with socket.socket(socket.AF_UNIX,socket.SOCK_DGRAM) as client:
+        client.sendto(f'M {action} {x} {y} {int(action!=2)} {int(action!=3)} 0'.encode(),str(runtime/'control.sock'))
+    time.sleep(.15)
+def next_frames():
+    before=json.loads((runtime/'frame.json').read_text())['frame']
+    deadline=time.monotonic()+15
+    while time.monotonic()<deadline:
+        if json.loads((runtime/'frame.json').read_text())['frame']>=before+2:return
+        time.sleep(.1)
+    raise SystemExit('Mod controls did not produce fresh frames')
+pointer(1,sx,sy);pointer(2,ex,ey);pointer(3,ex,ey)
+next_frames()
+pointer(1,ax,ay);pointer(3,ax,ay)
+deadline=time.monotonic()+15
+while time.monotonic()<deadline:
+    state=dsp()
+    if state['profiles'][0][3]>60:break
+    time.sleep(.2)
+else:raise SystemExit('dragging the actual SUB strength slider and tapping Apply did not save the value')
+next_frames()
+saved.write_text(json.dumps(state['profiles']))
+print('PASS original Engine: real SUB slider drag and Apply saved settings through the SDK')

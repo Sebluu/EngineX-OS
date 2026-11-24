@@ -90,11 +90,14 @@ class HTTPTests(unittest.TestCase):
 
     def test_feedback_is_explicitly_limited_and_local(self):
         (self.data/'StreamingAccounts.json').write_text('{"token":"never-export"}')
+        mod=self.data/'enginex/mods/output-equalizer';mod.mkdir(parents=True)
+        (mod/'mod.json').write_text('{"version":"0.1.1","secret":"never-export"}')
         (self.data/'enginex/ui/output-dsp-v1.conf').write_text(' '.join(['0']*140))
         code,raw,headers=self.request('/api/feedback',{'note':'my test'})
         result=json.loads(raw)
         self.assertEqual(code,200); self.assertTrue(result['uiOnly'])
         self.assertEqual(result['note'],'my test');self.assertEqual(len(result['dspProfiles']),4)
+        self.assertEqual(result['modVersions'],{'output-equalizer':'0.1.1'})
         self.assertNotIn('never-export',raw.decode())
         self.assertIn("connect-src 'self'",headers['Content-Security-Policy'])
         self.assertEqual(self.request('/api/feedback',{'note':42})[0],400)
