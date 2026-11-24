@@ -6,10 +6,19 @@ import math
 import os
 from pathlib import Path
 import socket
+import subprocess
+import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlsplit
 
 HERE = Path(__file__).resolve().parent
+
+def inside_vm():
+    try:
+        product = Path('/sys/class/dmi/id/product_name').read_text()
+        return Path('/run/enginex-preview-vm').read_text() == 'local-vm-only\n' and ('QEMU' in product or 'Standard PC' in product)
+    except OSError:
+        return False
 
 def packet(body, width, height):
     if body.get('kind') == 'pointer':
@@ -128,6 +137,10 @@ class Handler(BaseHTTPRequestHandler):
             elif path == '/api/restart':
                 (self.server.runtime / 'restart.request').write_text('restart\n')
                 self.send(200, b'{}')
+            elif path == '/api/stop':
+                if not inside_vm(): self.send(403); return
+                self.send(200, b'{}')
+                threading.Thread(target=lambda: subprocess.run(['/usr/bin/systemctl','poweroff'],check=False),daemon=True).start()
             else:
                 self.send(404)
         except (ValueError, TypeError):
@@ -140,11 +153,12 @@ def main():
     parser.add_argument('--runtime', type=Path, required=True)
     parser.add_argument('--data', type=Path, required=True)
     parser.add_argument('--port', type=int, default=8765)
+    parser.add_argument('--public-port', type=int, default=None)
     parser.add_argument('--listen', default='127.0.0.1')
     args = parser.parse_args()
-    if args.listen != '127.0.0.1' and not Path('/run/enginex-preview-vm').is_file():
+    if args.listen != '127.0.0.1' and not inside_vm():
         parser.error('non-loopback listener is allowed only inside the preview VM')
-    PreviewServer((args.listen, args.port), args.runtime, args.data).serve_forever()
+    PreviewServer((args.listen, args.port), args.runtime, args.data,args.public_port).serve_forever()
 
 if __name__ == '__main__':
     main()
