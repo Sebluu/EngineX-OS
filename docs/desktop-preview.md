@@ -87,3 +87,7 @@ input smoke test injects an explicitly CI-only QML target into that process and
 requires a captured image plus acknowledgments from real pointer and keyboard
 events. That synthetic target is never included in the interactive preview.
 These checks do not replace testing an actual PRIME 4.
+
+The complete Linux VM setup was also exercised from a fresh disk, including
+the browser HTTP interface, feedback export, application restart, clean VM
+shutdown and a second boot: [verification run](https://github.com/Sebluu/EngineX-OS/actions/runs/45397402201).

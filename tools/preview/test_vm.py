@@ -3,6 +3,7 @@ import argparse
 import json
 from pathlib import Path
 import subprocess
+import shutil
 import sys
 import time
 from urllib.request import Request, urlopen
@@ -46,6 +47,17 @@ def main():
         image=request('/frame.png')
         assert image.startswith(b'\x89PNG\r\n\x1a\n') and len(image)>2000
         (args.directory/'browser-frame.png').write_bytes(image)
+        chrome=shutil.which('google-chrome') or shutil.which('chromium')
+        if not chrome:
+            raise RuntimeError('the CI browser check needs the runner-provided Chrome browser')
+        rendered=subprocess.run([chrome,'--headless','--no-sandbox','--disable-gpu',
+            '--disable-background-networking','--disable-dev-shm-usage','--no-first-run',
+            '--window-size=1600,1000','--virtual-time-budget=4000',
+            '--screenshot='+str(args.directory/'browser-frame.png'),
+            '--dump-dom','http://127.0.0.1:8765'],capture_output=True,text=True,timeout=40)
+        if rendered.returncode or '/frame.png?frame=' not in rendered.stdout or 'Lokale Vorschau' not in rendered.stdout:
+            raise RuntimeError('the real browser did not execute the preview frontend and load the Engine image')
+        print('PASS real Chrome browser: frontend JavaScript, local status polling and original Engine image',flush=True)
         report=json.loads(request('/api/feedback',{'note':'isolated VM smoke test'}))
         assert report['uiOnly'] and len(report['sourceCommit'])==40
         for action in ('down','up'):
