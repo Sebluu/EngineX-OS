@@ -349,6 +349,8 @@ func newTidalGateway(s *Server) *tidalGateway {
 	g.mux.HandleFunc("POST /v1/enginex/boot/ready", s.bootReady)
 	s.registerAppleMusicHelper(g.mux, "/v1/enginex/applemusic")
 	g.mux.HandleFunc("GET /v1/enginex/ui", s.uiStatus)
+	g.mux.HandleFunc("GET /v1/enginex/output-dsp", s.handleOutputDSP)
+	g.mux.HandleFunc("POST /v1/enginex/output-dsp", s.handleOutputDSP)
 	g.mux.HandleFunc("GET /v1/enginex/settings-copy", s.settingsCopyStatus)
 	g.mux.HandleFunc("POST /v1/enginex/settings-copy", s.settingsCopyControl)
 	g.mux.HandleFunc("POST /v1/enginex/settings-copy/prestart", s.settingsCopyPrestart)

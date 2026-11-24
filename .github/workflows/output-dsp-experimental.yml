@@ -89,8 +89,7 @@ jobs:
           go-version-file: go.mod
       - name: Format, vet, backend and loader race tests
         run: |
-          gofmt -w pkg/webui/output_dsp*.go
-          python3 -c 'import json,pathlib; print("OD_FORMATTED="+json.dumps({str(p):p.read_text() for p in pathlib.Path("pkg/webui").glob("output_dsp*.go")}))' 
+          test -z "$(gofmt -l pkg/webui/output_dsp*.go)"
           go vet ./pkg/webui ./pkg/mods
           go test -race ./pkg/webui ./pkg/mods
   threads:

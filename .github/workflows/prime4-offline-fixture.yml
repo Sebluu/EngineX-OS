@@ -1,0 +1,33 @@
+name: PRIME 4 official firmware inspection
+on:
+  push:
+    branches: [test/all-features]
+    paths: ['.github/workflows/prime4-offline-fixture.yml', 'tools/ui-mod/probe_prime4_fixture.py']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install extraction tools on the disposable runner
+        run: sudo apt-get -o Acquire::Retries=1 -o Acquire::http::Timeout=20 update && sudo apt-get install -y gcc-arm-linux-gnueabihf qemu-user e2fsprogs zstd python3-pil
+      - name: Download and verify the pinned official PRIME 4 5.3.0 image
+        run: |
+          set -euo pipefail
+          curl --fail --location --retry 2 --max-time 180 'https://public.inmusiccdn.com/Engine/5.3.0/RELEASE/d41cd81e67f225bf/PRIME4-5.3.0-Update.img' -o "$RUNNER_TEMP/official-prime4.img"
+          echo "8e49313be0ef338d5452631c5772ee5b1d72e076cae65bf69a6df8b5b210029f  $RUNNER_TEMP/official-prime4.img" | sha256sum -c -
+      - name: Extract files and QRC with unprivileged QEMU, never a device
+        run: |
+          set -euo pipefail
+          python3 -I tools/az01-packer/az01_packer.py unpack "$RUNNER_TEMP/official-prime4.img" --output "$RUNNER_TEMP/prime4-parts"
+          mkdir "$RUNNER_TEMP/prime4-root"
+          debugfs -R "rdump / $RUNNER_TEMP/prime4-root" "$RUNNER_TEMP/prime4-parts/rootfs.ext2" 2>"$RUNNER_TEMP/debugfs.log"
+          arm-linux-gnueabihf-gcc -O2 -shared -fPIC tools/ui-mod/qrc_dump.c -ldl -o "$RUNNER_TEMP/qrc-dump.so"
+          python3 -I tools/ui-mod/extract_qrc.py --tree "$RUNNER_TEMP/prime4-root" --preload "$RUNNER_TEMP/qrc-dump.so" --out "$RUNNER_TEMP/prime4-qrc"
+      - name: Record bounded assignment evidence and build matching UI packs
+        run: |
+          python3 tools/ui-mod/probe_prime4_fixture.py "$RUNNER_TEMP/prime4-root" "$RUNNER_TEMP/prime4-qrc"
+          python3 tools/ui-mod/build_packs.py --qrc "$RUNNER_TEMP/prime4-qrc" --out "$RUNNER_TEMP/prime4-ui-packs"
