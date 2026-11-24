@@ -19,8 +19,8 @@ def instrument(source):
             json "$W/$name-output-dsp.json" "j.get('version') == 1 and len(j.get('profiles', [])) == 4 and all(p[0] == 1 and p[2] == 1 and p[13] == -1 for p in j['profiles']) and j.get('enabled', 0) == (j.get('available', 0) & 3)"
     fi
 '''
-    panel_checks = '''        check "$name: Output Equalizer instantiates in Engine's own Qt" grep -aqF 'SCPROBE dsp-panel|output-equalizer|ready|' "$W/$name-engine.log"
-        check "$name: Subharmonic Synthesizer instantiates in Engine's own Qt" grep -aqF 'SCPROBE dsp-panel|subharmonic-synth|ready|' "$W/$name-engine.log"
+    panel_checks = '''        check "$name: Output Equalizer instantiates in Engine's own Qt" wait_for "$ENGINE_START" grep -aqF 'SCPROBE dsp-panel|output-equalizer|ready|' "$W/$name-engine.log"
+        check "$name: Subharmonic Synthesizer instantiates in Engine's own Qt" wait_for "$ENGINE_START" grep -aqF 'SCPROBE dsp-panel|subharmonic-synth|ready|' "$W/$name-engine.log"
 '''
     if extra.count("    fi\n") != 1:
         raise ValueError("installed-Mod assertion anchor changed")
