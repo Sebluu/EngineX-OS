@@ -7,6 +7,7 @@ Item {
     signal closed()
     ODC.Popup {
         id: odDialog
+        palette.windowText: "#e3eaf5"; palette.text: "#e3eaf5"; palette.base: "#0b1219"
         objectName: "outputDSPDialog"
         parent: ODC.Overlay.overlay
         visible: odHost.visible; modal: true; focus: true; padding: 0; z: 100000
@@ -85,8 +86,8 @@ Item {
             ODC.Label {text: odPanel.section==="eq"?"OUTPUT EQUALIZER":"SUBHARMONIC SYNTH";color:"white";font.pixelSize:22}
             Item {ODL.Layout.fillWidth:true}
             ODC.Switch {text:"Advanced";checked:odPanel.advanced;onToggled:odPanel.advanced=checked}
-            ODC.Button {text:"Apply";enabled:!odPanel.busy&&odPanel.vals.length===35&&odPanel.dirty;onClicked:odPanel.request({section:odPanel.section,pair:odPanel.pair,values:odPanel.vals})}
-            ODC.Button {objectName:"outputDSPClose";text:odPanel.dirty?"Discard / close":"Close";onClicked:odPanel.closed()}
+            ODC.Button {objectName:"outputDSPApply";text:"Apply";enabled:!odPanel.busy&&odPanel.vals.length===35&&odPanel.dirty;onClicked:odPanel.request({section:odPanel.section,pair:odPanel.pair,values:odPanel.vals})}
+            ODC.Button {objectName:"outputDSPClose";ODL.Layout.minimumWidth:160;ODL.Layout.maximumWidth:160;text:odPanel.dirty?"Discard / close":"Close";onClicked:odPanel.closed()}
         }
         ODL.RowLayout {
             Repeater {
@@ -156,8 +157,10 @@ Item {
                     ODL.RowLayout {
                         enabled:!odPanel.busy && odPanel.vals.length===35
                         visible:odPanel.section==="sub" && @SUB@ && (index<2||odPanel.advanced);width:odPanel.width-60
+                        // Keep the slider hit area large enough for direct touch.
+                        height:40
                         ODC.Label {text:modelData.t;color:"white";ODL.Layout.preferredWidth:240}
-                        ODC.Slider {ODL.Layout.fillWidth:true;from:modelData.lo;to:modelData.hi;stepSize:1;value:odPanel.vals[modelData.i]||0;onMoved:odPanel.change(modelData.i,value)}
+                        ODC.Slider {objectName:"outputDSPSubSlider"+index;ODL.Layout.fillWidth:true;ODL.Layout.fillHeight:true;from:modelData.lo;to:modelData.hi;stepSize:1;value:odPanel.vals[modelData.i]||0;onMoved:odPanel.change(modelData.i,value)}
                         ODC.Label {text:(odPanel.vals[modelData.i]||0).toFixed(0);color:"white"}
                     }
                 }
