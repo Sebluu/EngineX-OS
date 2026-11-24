@@ -27,8 +27,15 @@ def main():
         while time.monotonic()<deadline:
             if process.poll() is not None:
                 raise RuntimeError('VM launcher exited early')
+            console=args.directory/'console.log'
+            if console.exists():
+                tail=console.read_text(errors='replace')[-65536:]
+                if 'Failed to run module scripts-user' in tail or 'no Skins/Embedded' in tail:
+                    raise RuntimeError('VM setup failed; see the bounded serial diagnostics')
             try:
                 status=json.loads(request('/api/status'))
+                if status.get('setup')=='failed':
+                    raise RuntimeError('guest preview setup failed')
                 if status.get('frame',{}).get('width')==1280:
                     break
             except OSError:
@@ -81,6 +88,11 @@ def main():
         request('/api/stop',{})
         assert process.wait(timeout=90)==0, 'second VM shutdown failed'
         print('PASS full local VM: first-install cloud-init, original Engine framebuffer, browser input endpoint, feedback, application restart, full guest shutdown and second boot')
+    except BaseException:
+        console=args.directory/'console.log'
+        if console.exists():
+            print('VM SERIAL BEFORE SHUTDOWN:\n'+console.read_text(errors='replace')[-24000:],flush=True)
+        raise
     finally:
         if process.poll() is None:
             subprocess.run([*command,'stop'],check=False,timeout=10)

@@ -1,6 +1,7 @@
 #!/bin/bash
 # This is invoked by cloud-init inside our local x86 VM, never on the laptop.
 set -euo pipefail
+umask 022
 grep -Eqi 'QEMU|Standard PC' /sys/class/dmi/id/product_name || exit 2
 [ "$(id -u)" = 0 ] || exit 2
 repo=$(cd "$(dirname "$0")/../.." && pwd)
@@ -12,7 +13,7 @@ dpkg --add-architecture armhf
 printf '%s\n' 'Types: deb' 'URIs: https://ports.ubuntu.com/ubuntu-ports' 'Suites: noble noble-updates noble-security' 'Components: main universe' 'Architectures: armhf' 'Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg' > /etc/apt/sources.list.d/preview-armhf.sources
 apt-get -o Acquire::Retries=2 update
 update-binfmts --enable qemu-arm
-grep -q '^flags:.*F' /proc/sys/fs/binfmt_misc/qemu-arm
+grep -q '^flags:.*F' /proc/sys/fs/binfmt_misc/qemu-arm || { echo 'Preview setup: qemu-arm needs the persistent F binfmt flag' >&2; exit 1; }
 cd /var/lib/enginex-preview/work
 mkdir -p qt-sdk
 cd qt-sdk

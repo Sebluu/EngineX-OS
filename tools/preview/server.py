@@ -58,6 +58,11 @@ class PreviewServer(ThreadingHTTPServer):
         except (OSError, ValueError, KeyError):
             return {}
 
+    def setup_state(self):
+        try: value=(self.runtime/'setup.state').read_text().strip()
+        except OSError: return 'starting'
+        return value if value in ('building','ready','failed') else 'starting'
+
     def feedback(self, note=''):
         # Explicit whitelist: no access tokens, account files, library titles or raw logs.
         result = {'schema': 1, 'runtime': 'local QEMU preview', 'uiOnly': True,
@@ -111,7 +116,7 @@ class Handler(BaseHTTPRequestHandler):
             try: state=(self.server.runtime/'engine.state').read_text().strip()
             except OSError: state='starting'
             state='stopped' if state=='stopped' else 'running' if meta else 'starting'
-            self.send(200, json.dumps({'uiOnly': True, 'frame': meta, 'engine': state}).encode())
+            self.send(200, json.dumps({'uiOnly': True, 'frame': meta, 'engine': state, 'setup': self.server.setup_state()}).encode())
         elif path == '/frame.png':
             try: self.send(200, (self.server.runtime / 'frame.png').read_bytes(), 'image/png')
             except OSError: self.send(503)

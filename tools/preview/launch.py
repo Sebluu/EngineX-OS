@@ -38,6 +38,8 @@ After=network-online.target
 [Service]
 Type=simple
 ExecStart=/bin/bash /opt/enginex-preview-source/tools/preview/guest-start.sh
+StandardOutput=journal+console
+StandardError=journal+console
 TimeoutStopSec=30
 [Install]
 WantedBy=multi-user.target
