@@ -61,8 +61,10 @@ ApplicationWindow {
         id: finish; interval: 450
         onTriggered: {
             var overlay=root.Overlay.overlay
+            console.warn("DSP_STACK|drawer=" + settings.position + "|overlayParent=" + (odModPanel.parent === overlay) + "|item=" + !!odModPanel.item + "|visible=" + (odModPanel.item ? odModPanel.item.visible : false) + "|size=" + odModPanel.width + "x" + odModPanel.height + "|")
             if(settings.position < .99 || odModPanel.parent !== overlay || !odModPanel.item || !odModPanel.item.visible){Qt.exit(3);return}
             var point=odModPanel.item.mapToItem(overlay,odModPanel.item.width/2,odModPanel.item.height/2)
+            console.warn("DSP_TOP|same=" + (overlay.childAt(point.x,point.y) === odModPanel) + "|child=" + overlay.childAt(point.x,point.y) + "|loader=" + odModPanel + "|")
             if(overlay.childAt(point.x,point.y) !== odModPanel){Qt.exit(4);return}
             odModPanel.item.closed()
             if(odModPanel.active){Qt.exit(5);return}
@@ -94,6 +96,6 @@ ApplicationWindow {
                 raise SystemExit('Settings regression did not reject the old loader parent')
             print('PASS old Settings loader fails the popup-overlay check')
         result = subprocess.run(['qmlscene', str(base / 'Settings.qml')], env=env, capture_output=True, text=True, timeout=15)
-        print(section, result.stdout, result.stderr)
+        print(section, "exit="+str(result.returncode), result.stdout, result.stderr)
         if result.returncode or 'DSP_SETTINGS_OVERLAY_PASSED='+section not in result.stderr or any(word in result.stderr for word in ['ReferenceError', 'TypeError', 'is not a type', 'Cannot assign']):
             raise SystemExit('Settings overlay regression test failed')
