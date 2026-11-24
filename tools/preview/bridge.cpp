@@ -9,6 +9,8 @@
 #include <QPointer>
 #include <QQuickWindow>
 #include <QTimer>
+#include <QtTest/qtestmouse.h>
+#include <QtTest/qtestkeyboard.h>
 #include <cerrno>
 #include <cmath>
 #include <cstdio>
@@ -59,25 +61,22 @@ void dispatch() {
             if (action < 1 || action > 3 || !std::isfinite(x) || !std::isfinite(y) ||
                 x < 0 || y < 0 || x >= target->width() || y >= target->height() ||
                 button < 0 || button > 4 || buttons < 0 || buttons > 7 || (modifiers & ~0x1e000000)) continue;
-            const auto type = action == 1 ? QEvent::MouseButtonPress : action == 3 ? QEvent::MouseButtonRelease : QEvent::MouseMove;
-            const QPointF local(x, y);
-            const QPointF global = target->mapToGlobal(local.toPoint());
-            QMouseEvent event(type, local, local, global, static_cast<Qt::MouseButton>(button),
-                              Qt::MouseButtons(static_cast<Qt::MouseButton>(buttons)),
-                              Qt::KeyboardModifiers(static_cast<Qt::KeyboardModifier>(modifiers)));
-            event.setTimestamp(static_cast<quint64>(clock.elapsed()) + 1);
-            QCoreApplication::sendEvent(target, &event);
-            if (getenv("ENGINEX_PREVIEW_SMOKE")) fprintf(stderr, "PREVIEW_INPUT M %d %.0f %.0f accepted=%d focus=%d\n", action, x, y, event.isAccepted(), target == QGuiApplication::focusWindow());
+            const auto mouseButton = static_cast<Qt::MouseButton>(button);
+            const auto keys = Qt::KeyboardModifiers(static_cast<Qt::KeyboardModifier>(modifiers));
+            const QPoint local(qRound(x), qRound(y));
+            // Qt Quick needs input routed through Qt's window-system event
+            // queue. Public QtTest helpers preserve pointer grabs and focus.
+            if (action == 1) QTest::mousePress(target, mouseButton, keys, local, 0);
+            else if (action == 3) QTest::mouseRelease(target, mouseButton, keys, local, 0);
+            else QTest::mouseMove(target, local, 0);
         } else if (sscanf(packet, "K %d %d %d %u", &action, &key, &modifiers, &character) == 4) {
             if ((action != 1 && action != 3) || key < 0 || key > 0x1ffffff || character > 0x10ffff ||
                 (character >= 0xd800 && character <= 0xdfff) || (modifiers & ~0x1e000000)) continue;
             const char32_t point = character;
             const QString text = character ? QString::fromUcs4(&point, 1) : QString();
-            QKeyEvent event(action == 1 ? QEvent::KeyPress : QEvent::KeyRelease, key,
-                            Qt::KeyboardModifiers(static_cast<Qt::KeyboardModifier>(modifiers)), text);
-            event.setTimestamp(static_cast<quint64>(clock.elapsed()) + 1);
-            QCoreApplication::sendEvent(target, &event);
-            if (getenv("ENGINEX_PREVIEW_SMOKE")) fprintf(stderr, "PREVIEW_INPUT K %d accepted=%d\n", action, event.isAccepted());
+            QTest::sendKeyEvent(action == 1 ? QTest::Press : QTest::Release, target,
+                               static_cast<Qt::Key>(key), text,
+                               Qt::KeyboardModifiers(static_cast<Qt::KeyboardModifier>(modifiers)), 0);
         }
     }
 }
