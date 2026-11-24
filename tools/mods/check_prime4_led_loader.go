@@ -19,6 +19,11 @@ func main() {
 	defer os.RemoveAll(work)
 	ui := filepath.Join(work, "ui")
 	media := filepath.Join(work, "media")
+	for _, dir := range []string{ui, media} {
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			panic(err)
+		}
+	}
 	manager := mods.NewManager(media, ui)
 	archive, err := os.Open(os.Args[1])
 	if err != nil {
