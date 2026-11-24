@@ -33,7 +33,7 @@ deadline = time.monotonic() + 15
 while time.monotonic() < deadline:
     text = log.read_text(errors='replace')
     if 'PREVIEW_MOUSE_PASS' in text and 'PREVIEW_KEY_PASS' in text:
-        print('PASS original ARM Engine: PNG capture, real mouse click and keyboard event')
+        print('PASS original ARM Engine: PNG capture, real pointer/touch and keyboard event')
         break
     time.sleep(.25)
 else:

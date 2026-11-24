@@ -11,6 +11,7 @@
 #include <QQuickItem>
 #include <QTimer>
 #include <QtTest/qtestspontaneevent.h>
+#include <QtTest/qtesttouch.h>
 #include <cerrno>
 #include <cmath>
 #include <cstdio>
@@ -37,6 +38,8 @@ constexpr const char *directory = "/tmp/preview";
 int input = -1;
 quint64 frame = 0;
 QElapsedTimer clock;
+QPointingDevice *touchDevice = nullptr;
+bool touching = false;
 QPointer<QQuickWindow> selected;
 
 QQuickWindow *window() {
@@ -85,6 +88,18 @@ void dispatch() {
                     static_cast<void *>(target), static_cast<void *>(QGuiApplication::focusWindow()),
                     static_cast<void *>(QGuiApplication::modalWindow()), static_cast<void *>(probe),
                     probe && probe->isEnabled(), probe && probe->isVisible());
+            }
+            // PlanckQuickView is a touchscreen view. Its mouse virtual handlers
+            // do not deliver desktop clicks, so map the primary pointer to a
+            // registered Qt touch device, just like the physical screen.
+            if ((action == 1 && button == 1) || touching) {
+                auto sequence = QTest::touchEvent(target, touchDevice, false);
+                const QPoint point(qRound(x), qRound(y));
+                if (action == 1) { sequence.press(0, point, target); touching = true; }
+                else if (action == 3) { sequence.release(0, point, target); touching = false; }
+                else sequence.move(0, point, target);
+                sequence.commit(false);
+                continue;
             }
             if (qt_handleMouseEvent) {
                 qt_handleMouseEvent(target, local, global,
@@ -137,6 +152,7 @@ void capture() {
 
 void start() {
     clock.start();
+    touchDevice = QTest::createTouchDevice();
     mkdir(directory, 0700);
     input = socket(AF_UNIX, SOCK_DGRAM | SOCK_NONBLOCK | SOCK_CLOEXEC, 0);
     if (input < 0) { fprintf(stderr, "PREVIEW_SOCKET_ERROR %s\n", strerror(errno)); return; }
