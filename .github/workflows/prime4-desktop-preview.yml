@@ -21,7 +21,7 @@ jobs:
         run: |
           set -euo pipefail
           sudo apt-get -o Acquire::Retries=1 -o Acquire::http::Timeout=20 update
-          sudo apt-get install -y --no-install-recommends e2fsprogs zstd
+          sudo apt-get install -y --no-install-recommends e2fsprogs zstd binutils
           python3 -I tools/az01-packer/az01_packer.py unpack "$RUNNER_TEMP/prime4.img" --output "$RUNNER_TEMP/prime4-parts"
           mkdir "$RUNNER_TEMP/prime4-root"
           debugfs -R "rdump / $RUNNER_TEMP/prime4-root" "$RUNNER_TEMP/prime4-parts/rootfs.ext2" 2>"$RUNNER_TEMP/debugfs.log"
@@ -38,3 +38,5 @@ jobs:
           for p in sorted(root.rglob("libQt5Core.so*")):
               print("QT_CORE",p.relative_to(root))
           PY
+          readelf --dyn-syms --wide "$RUNNER_TEMP/prime4-root/usr/Engine/Engine" | c++filt | python3 -c 'import sys; words=("qVersion","QCoreApplication::postEvent","QCoreApplication::sendEvent","QMetaObject::invokeMethodImpl","QGuiApplication::allWindows","QGuiApplication::topLevelWindows","QMouseEvent::QMouseEvent","QKeyEvent::QKeyEvent","QQuickWindow::grabWindow","QTimer::singleShot","QTimer::start","QImage::save"); rows=[s.strip() for s in sys.stdin if any(w in s for w in words)]; print("\\n".join(rows[:55]))'
+          strings "$RUNNER_TEMP/prime4-root/usr/Engine/Engine" | python3 -c 'import re,sys; rows=[s.strip() for s in sys.stdin if re.fullmatch(r"5\\.(12|15)\\.\\d+\\s*",s)]; print("QT_VERSION_LITERALS="+str(sorted(set(rows))))'
