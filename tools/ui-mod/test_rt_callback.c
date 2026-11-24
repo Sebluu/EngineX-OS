@@ -118,7 +118,6 @@ static uint32_t fake_master(void *host, void *context, int ic, const float *cons
 /* Everything the hook runs on Engine's audio and render threads for one block. */
 static void audio_block(int channels, int frames) {
     in_audio = 1;
-    if (OD_FEATURE_EQ || OD_FEATURE_SUB) assert(hook_master_output(NULL, NULL, 0, NULL, 10, out, frames) == 10u);
     assert(hook_master_output(NULL, NULL, 0, NULL, channels, out, frames) == (uint32_t)(four_deck_pad_on && channels == 4 ? 8 : channels));
     hook_autogate_process(owner, pair, pair, (uint32_t)frames);
     hook_dub_echo(owner, pair, pair, (uint32_t)frames);
@@ -194,15 +193,15 @@ int main(int argc, char **argv) {
 #endif
 
     static const int sizes[] = {64, 225, 256, MAX_FRAMES};
-    enum { SIZES = sizeof sizes / sizeof *sizes, LAYOUTS = 3, BLOCKS = 700, PASSES = 4 };
+    enum { SIZES = sizeof sizes / sizeof *sizes, LAYOUTS = (OD_FEATURE_EQ || OD_FEATURE_SUB) ? 4 : 3, BLOCKS = 700, PASSES = 4 };
     static unsigned long long best[SIZES][LAYOUTS][BLOCKS];
     unsigned misses = 0, blocks = 0;
     unsigned long long worst = 0, worst_budget = 1;
     /* Pass 0 makes the state resident, as Engine's locked memory is on a deck; the others are timed. */
     for (int pass = 0; pass < PASSES; pass++)
         for (unsigned n = 0; n < SIZES; n++)
-            for (int layout = 0; layout < LAYOUTS; layout++) { /* a player, a player in the four-deck layout, eight outputs */
-                int frames = sizes[n], channels = layout == 2 ? 8 : 4;
+            for (int layout = 0; layout < LAYOUTS; layout++) { /* player, four-deck player, eight outputs, and (if enabled) JC11 ten outputs */
+                int frames = sizes[n], channels = layout == 3 ? 10 : layout == 2 ? 8 : 4;
                 four_deck_pad_on = layout == 1;
                 unsigned long long budget = (unsigned long long)frames * 1000000000ull / 96000ull;
                 for (unsigned block = 0; block < BLOCKS; block++) { /* over 1 s at 48 kHz: the Bluetooth rate is measured */
