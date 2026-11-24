@@ -64,6 +64,8 @@ type Config struct {
 	USBPreparingPath string
 	// FXSelectorReadyFile overrides the tmpfs heartbeat path in sandbox tests.
 	FXSelectorReadyFile string
+	// OutputDSPRuntimeDir overrides the ephemeral, boot-bound capability/lease directory in tests.
+	OutputDSPRuntimeDir string
 	// ColorFXReadyFile overrides the channel-knob Color FX heartbeat path in sandbox tests.
 	ColorFXReadyFile string
 	// ZoneinfoDir overrides /usr/share/zoneinfo in tests.
@@ -336,6 +338,9 @@ func New(cfg Config, jobs *Jobs) *Server {
 		go s.tailscaleResume() // restarts the daemon when it was left on (#130)
 	}
 	go s.modsResume() // enabled mods' daemons do not survive a reboot on their own
+	if isDeckStateDir(cfg.StateDir) && imagePrefix(deviceCompatible()) == "PRIME4" {
+		go s.odLeaseLoop()
+	}
 	s.mux.HandleFunc("GET /api/mounts", s.handleMounts)
 	s.mux.HandleFunc("POST /api/mounts", s.handleMounts)
 	s.mux.HandleFunc("DELETE /api/mounts", s.handleMounts)
@@ -1219,3 +1224,4 @@ const bootNormalHint=document.getElementById('hint').textContent;
 async function showBootNotice(){try{const r=await fetch('/boot-status',{cache:'no-store'});if(!r.ok)return;const v=await r.json();const e=document.getElementById('bootFallback');e.hidden=!v.fallback;const i=l.startsWith('zh')?(l.includes('hant')||/-(tw|hk|mo)/.test(l)?2:1):l.startsWith('es')?3:0;e.textContent=bootNotices[v.driveAvailable?0:v.reportSaved?1:2][i];document.getElementById('hint').textContent=v.fallback?bootNoCodeHints[i]:bootNormalHint}catch{}}
 showBootNotice();setInterval(showBootNotice,5000);
 `
+

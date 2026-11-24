@@ -18,7 +18,7 @@ for test in test_pioneer_selector test_dsp_smooth test_fx_ms test_ms_lazy test_j
 done
 
 arm-linux-gnueabihf-gcc -O2 -Wall -Wextra -Werror -Wl,-z,max-page-size=4096 \
-    "$repo/tools/ui-mod/test_flanger_scope.c" -ldl -lpthread -o "$work/test_flanger_scope"
+    "$repo/tools/ui-mod/test_flanger_scope.c" -ldl -lpthread -lm -o "$work/test_flanger_scope"
 "$work/test_flanger_scope" > "$work/test_flanger_scope.log" 2>&1
 echo "test_flanger_scope armhf PASS"
 arm-linux-gnueabihf-gcc -O2 -Wall -Wextra -Werror "$repo/tools/ui-mod/test_color_fx_hook.c" -ldl -lpthread -lm -o "$work/test_color_fx_hook"
@@ -34,7 +34,7 @@ for arch in AZ04 armhf; do
     echo "test_ms_master_hook $arch PASS"
     for contract in fast off; do
         define=(); if [ "$contract" = off ]; then define=(-DGOLDEN_FP_OFF); fi
-        "$compiler" -O2 "${define[@]}" -ffp-contract="$contract" "$repo/tools/ui-mod/test_master_golden.c" -ldl -lpthread -o "$work/test_master_golden-$arch-$contract"
+        "$compiler" -O2 "${define[@]}" -ffp-contract="$contract" "$repo/tools/ui-mod/test_master_golden.c" -ldl -lpthread -lm -o "$work/test_master_golden-$arch-$contract"
         "$work/test_master_golden-$arch-$contract" > "$work/test_master_golden-$arch-$contract.log" 2>&1
         echo "test_master_golden $arch $contract PASS"
         "$compiler" -O2 "${define[@]}" -ffp-contract="$contract" "$repo/tools/ui-mod/test_px_off_golden.c" -lm -o "$work/test_px_off_golden-$arch-$contract"

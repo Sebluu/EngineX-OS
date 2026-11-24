@@ -83,8 +83,8 @@ int __wrap_printf(const char *fmt, ...) {
 }
 
 enum { MAX_FRAMES = 1024, WAVE = 1024 };
-static float wave[WAVE], buffers[8][MAX_FRAMES];
-static float *out[8], *pair[2] = {buffers[0], buffers[1]};
+static float wave[WAVE], buffers[10][MAX_FRAMES];
+static float *out[10], *pair[2] = {buffers[0], buffers[1]};
 static unsigned char sender_self[128], owner[0x400], handler[64], event[64];
 static unsigned long long clock_ns = 1;
 static unsigned phase;
@@ -148,7 +148,7 @@ static unsigned long long now_ns(void) {
 int main(int argc, char **argv) {
     trip = argc > 1 && !strcmp(argv[1], "selftest");
     for (int i = 0; i < WAVE; i++) wave[i] = sinf((float)i * 6.2831853f / WAVE);
-    for (int ch = 0; ch < 8; ch++) out[ch] = buffers[ch];
+    for (int ch = 0; ch < 10; ch++) out[ch] = buffers[ch];
     for (int slot = 0; slot < DSP_HOOK_COUNT; slot++) dsp_originals[slot] = (void *)fake_event;
     dsp_originals[DSP_AUTOGATE] = dsp_originals[DSP_COMMON] = dsp_originals[DSP_DUB_ECHO] = (void *)fake_process;
     dsp_originals[DSP_WASH] = dsp_originals[DSP_FLANGER] = (void *)fake_process;
@@ -163,6 +163,14 @@ int main(int argc, char **argv) {
     hook_test_clock = fake_clock;
     bt_send_orig = fake_sender;
     stream_rate = 44100;
+    if (OD_FEATURE_EQ || OD_FEATURE_SUB) {
+        struct od_params p = {0}; struct od_cfg cfg;
+        p.eq_on=p.sub_on=1;p.hp=35;p.wet=30;p.maxhz=56;p.minhz=25;p.low=p.high=100;p.threshold=-48;p.attack=12;p.release=100;
+        for (int b=0;b<8;b++){p.bands[b][0]=90*(b+1);p.bands[b][1]=1;p.bands[b][2]=1;}
+        od_prepare(&cfg,&p,master_rate);
+        for (unsigned pair=0;pair<4;pair++) od_publish(pair,&cfg);
+        od_allowed=1;
+    }
     echo_enabled = hifi_enabled = gain_enabled = lim_enabled = 1;
     live_tap.on = 1;
     for (unsigned p = 0; p < 4; p++) sc_ms_prepare(&master_ms[p]); /* the polling worker's part */
@@ -185,15 +193,15 @@ int main(int argc, char **argv) {
 #endif
 
     static const int sizes[] = {64, 225, 256, MAX_FRAMES};
-    enum { SIZES = sizeof sizes / sizeof *sizes, LAYOUTS = 3, BLOCKS = 700, PASSES = 4 };
+    enum { SIZES = sizeof sizes / sizeof *sizes, LAYOUTS = (OD_FEATURE_EQ || OD_FEATURE_SUB) ? 4 : 3, BLOCKS = 700, PASSES = 4 };
     static unsigned long long best[SIZES][LAYOUTS][BLOCKS];
     unsigned misses = 0, blocks = 0;
     unsigned long long worst = 0, worst_budget = 1;
     /* Pass 0 makes the state resident, as Engine's locked memory is on a deck; the others are timed. */
     for (int pass = 0; pass < PASSES; pass++)
         for (unsigned n = 0; n < SIZES; n++)
-            for (int layout = 0; layout < LAYOUTS; layout++) { /* a player, a player in the four-deck layout, eight outputs */
-                int frames = sizes[n], channels = layout == 2 ? 8 : 4;
+            for (int layout = 0; layout < LAYOUTS; layout++) { /* player, four-deck player, eight outputs, and (if enabled) JC11 ten outputs */
+                int frames = sizes[n], channels = layout == 3 ? 10 : layout == 2 ? 8 : 4;
                 four_deck_pad_on = layout == 1;
                 unsigned long long budget = (unsigned long long)frames * 1000000000ull / 96000ull;
                 for (unsigned block = 0; block < BLOCKS; block++) { /* over 1 s at 48 kHz: the Bluetooth rate is measured */
