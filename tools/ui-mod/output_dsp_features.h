@@ -4,6 +4,6 @@
 #define OD_FEATURE_EQ 0
 #endif
 #ifndef OD_FEATURE_SUB
-#define OD_FEATURE_SUB 0
+#define OD_FEATURE_SUB 1
 #endif
 #endif
