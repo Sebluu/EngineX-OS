@@ -18,14 +18,16 @@ jobs:
           curl --fail --location --retry 2 --max-time 180 'https://public.inmusiccdn.com/Engine/5.3.0/RELEASE/d41cd81e67f225bf/PRIME4-5.3.0-Update.img' -o "$RUNNER_TEMP/official-prime4.img"
           echo "8e49313be0ef338d5452631c5772ee5b1d72e076cae65bf69a6df8b5b210029f  $RUNNER_TEMP/official-prime4.img" | sha256sum -c -
       - name: Install extraction tools on the disposable runner
-        timeout-minutes: 5
+        timeout-minutes: 10
         run: |
           apt_args=(-o Acquire::ForceIPv4=true -o Acquire::Retries=1 -o Acquire::http::Timeout=20 -o Acquire::https::Timeout=20)
           if test -f /etc/apt/sources.list.d/ubuntu.sources; then
             apt_args+=(-o Dir::Etc::sourcelist=sources.list.d/ubuntu.sources -o Dir::Etc::sourceparts=-)
           fi
+          # Pin the Ubuntu archive endpoint instead of the runner's throttled EC2 mirror.
+          sudo sed -i 's|mirror+file:/etc/apt/apt-mirrors.txt|https://archive.ubuntu.com/ubuntu|g' /etc/apt/sources.list.d/ubuntu.sources
           sudo apt-get "${apt_args[@]}" update
-          sudo apt-get "${apt_args[@]}" install -y --no-install-recommends gcc-arm-linux-gnueabihf qemu-user e2fsprogs zstd python3-pil
+          sudo apt-get "${apt_args[@]}" install -y --no-install-recommends gcc-arm-linux-gnueabihf libc6-dev-armhf-cross qemu-user e2fsprogs zstd python3-pil
       - name: Extract files and QRC with unprivileged QEMU, never a device
         run: |
           set -euo pipefail
