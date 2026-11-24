@@ -5,6 +5,7 @@ import socket
 import re
 import sys
 import time
+from urllib.request import Request, urlopen
 from PIL import Image
 
 runtime, log = map(Path, sys.argv[1:])
@@ -37,3 +38,24 @@ while time.monotonic() < deadline:
     time.sleep(.25)
 else:
     raise SystemExit('original Engine did not acknowledge real input events')
+
+def dsp(body=None):
+    request = Request('http://127.0.0.1:8080/v1/enginex/output-dsp',
+                      data=json.dumps(body).encode() if body is not None else None,
+                      headers={'Content-Type':'application/json'})
+    with urlopen(request,timeout=5) as response:
+        return json.load(response)
+
+state = dsp()
+assert state['available'] == 3 and state['enabled'] == 3 and state['rate'] == 48000, state
+saved = runtime/'smoke-saved.json'
+if saved.exists():
+    assert state['profiles'] == json.loads(saved.read_text()), 'settings lost after full sandbox restart'
+    print('PASS preview settings survived Engine and backend restart')
+values = list(state['profiles'][0]); values[0] = 1; values[28] = -3
+state = dsp({'section':'eq','pair':0,'values':values})
+values = list(state['profiles'][0]); values[2] = 1; values[3] = 35
+state = dsp({'section':'sub','pair':0,'values':values})
+assert state['profiles'][0][0] == 1 and state['profiles'][0][2] == 1 and state['profiles'][0][28] == -3
+saved.write_text(json.dumps(state['profiles']))
+print('PASS preview-only DSP capabilities and persisted EQ/SUB parameter edits')

@@ -33,7 +33,7 @@ jobs:
           sudo dpkg --add-architecture armhf
           printf '%s\n' 'Types: deb' 'URIs: https://ports.ubuntu.com/ubuntu-ports' 'Suites: noble noble-updates noble-security' 'Components: main universe' 'Architectures: armhf' 'Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg' | sudo tee /etc/apt/sources.list.d/preview-armhf.sources > /dev/null
           sudo apt-get -o Acquire::Retries=1 -o Acquire::http::Timeout=20 update
-          sudo apt-get install -y --no-install-recommends g++-arm-linux-gnueabihf libc6-dev-armhf-cross qt6-base-dev-tools qemu-user-static binfmt-support e2fsprogs zstd python3-pil iproute2
+          sudo apt-get install -y --no-install-recommends g++-arm-linux-gnueabihf libc6-dev-armhf-cross qt6-base-dev-tools qemu-user qemu-user-static binfmt-support e2fsprogs zstd python3-pil iproute2
           mkdir "$RUNNER_TEMP/desktop-preview/qt-sdk"
           cd "$RUNNER_TEMP/desktop-preview/qt-sdk"
           apt-get download qt6-base-dev:armhf qt6-declarative-dev:armhf libqt6test6t64:armhf
@@ -49,7 +49,6 @@ jobs:
           bash -n tools/preview/*.sh
           python3 -m unittest discover -s tools/preview -p test_preview.py -v
           gofmt -w tools/preview/backend.go
-          python3 -c 'import json; print("PREVIEW_FORMATTED_GO="+json.dumps(open("tools/preview/backend.go").read()))'
           GOOS=linux GOARCH=arm GOARM=7 CGO_ENABLED=0 go build -trimpath -o "$RUNNER_TEMP/desktop-preview/backend" tools/preview/backend.go
       - name: Extract and run actual ARM Engine with synthetic input target
         timeout-minutes: 8
@@ -62,11 +61,13 @@ jobs:
           mkdir -p "$task_work/runtime"
           sudo env "PATH=$PATH" "GITHUB_ACTIONS=true" bash tools/preview/build.sh "$task_work"
           sudo env "PATH=$PATH" "GITHUB_ACTIONS=true" bash tools/preview/sandbox.sh "$task_work" smoke
+          sudo env "PATH=$PATH" "GITHUB_ACTIONS=true" bash tools/preview/sandbox.sh "$task_work" smoke
       - name: Bounded diagnostic evidence
         if: always()
         run: |
           task_work="$RUNNER_TEMP/desktop-preview"
           if test -f "$task_work/engine.log"; then grep -aE 'PREVIEW_|QmlWarnings|ReferenceError|TypeError|Expected token|is not a type|symbol lookup|error while|Cannot load|Could not|ASSERT|Segmentation|Aborted' "$task_work/engine.log" | tail -30 || true; fi
+          if test -f "$task_work/backend.log"; then tail -15 "$task_work/backend.log"; fi
           if test -f "$task_work/runtime/frame.json"; then cat "$task_work/runtime/frame.json"; fi
           # No firmware, vendor files, runtime credentials or compiled binary is uploaded.
       - uses: actions/upload-artifact@v4
@@ -74,5 +75,32 @@ jobs:
         with:
           name: preview-frame
           path: ${{ runner.temp }}/desktop-preview/runtime/frame.png
+          if-no-files-found: ignore
+          retention-days: 1
+
+  local-vm:
+    needs: native-ui
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install local VM launcher dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends qemu-system-x86 qemu-utils cloud-image-utils
+          if test -e /dev/kvm; then sudo chmod 666 /dev/kvm; fi
+      - name: Start the complete local browser VM and test its lifecycle
+        timeout-minutes: 24
+        run: python3 tools/preview/test_vm.py "$RUNNER_TEMP/browser-vm"
+      - name: Bounded VM setup diagnostics
+        if: always()
+        run: |
+          test ! -f "$RUNNER_TEMP/browser-vm/launcher-test.log" || tail -30 "$RUNNER_TEMP/browser-vm/launcher-test.log"
+          test ! -f "$RUNNER_TEMP/browser-vm/console.log" || tail -80 "$RUNNER_TEMP/browser-vm/console.log"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: local-vm-frame
+          path: ${{ runner.temp }}/browser-vm/browser-frame.png
           if-no-files-found: ignore
           retention-days: 1

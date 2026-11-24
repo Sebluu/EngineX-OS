@@ -65,7 +65,7 @@ systemctl start --no-block enginex-preview.service
     return '#cloud-config\n'+json.dumps({
         'package_update':True,
         'packages':['build-essential','g++-arm-linux-gnueabihf','libc6-dev-armhf-cross',
-                    'qt6-base-dev-tools','qemu-user-static','binfmt-support','e2fsprogs',
+                    'qt6-base-dev-tools','qemu-user','qemu-user-static','binfmt-support','e2fsprogs',
                     'zstd','python3-pil','iproute2','curl','git','golang-go','xz-utils'],
         'write_files':entries,
         'runcmd':[['bash','/var/lib/enginex-preview/bootstrap.sh']],
