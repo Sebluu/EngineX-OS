@@ -25,3 +25,23 @@ Share only the relevant excerpts or report for private development; do not commi
 - FX remains lit throughout multiple BPM changes when active; goes back to native off state immediately on disable.
 - Cue preview, mixer FX assignment, MIDI/computer mode, stock LEDs and audio are unaffected.
 - Compare actual hardware LED traffic and visible controls on a JC11, not just simulated UI.
+
+
+## Mod Hub boundary and current status
+
+This branch still changes no LEDs. The assignment evidence has not been
+provided, and the repository does not contain the required vendor assignments.
+The integration branch now also includes this evidence collector and its tests;
+its name does not imply the requested steady LEDs are implemented.
+
+Prefer a QML-only Mod once the exact original PRIME 4 bindings and the native
+play/FX-enable states have been demonstrated against a pinned 5.3.0 build.
+Use the existing Mod loader's overlay, disable/uninstall restoration and safe-mode
+quarantine. Do not install a second preload, rewrite MIDI velocities globally,
+modify controller firmware, write boot files or replace native binaries from a
+Mod script. If the animation is implemented by the MCU, a QML-only Mod is not
+established as feasible; retain this feature as blocked instead of guessing.
+
+The inventory is read-only, skips links outside the extraction and oversized
+files, and records source hashes. Synthetic regression fixtures verify that
+behavior; they do not validate actual LED semantics or physical hardware.
