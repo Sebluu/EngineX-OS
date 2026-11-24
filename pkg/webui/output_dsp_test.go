@@ -50,7 +50,7 @@ func TestOutputDSPModArchiveLifecycle(t *testing.T) {
     }
     odTestReady(t,s)
     if s.odEnabled()!=3{t.Fatal("enabled Mods missing")}
-    row:=odDefaults()[0];row[0]=1;row[2]=1;row[26]=-6
+    row:=odDefaults()[0];row[0]=1;row[2]=1;row[28]=-6
     body,_:=json.Marshal(map[string]any{"section":"eq","pair":0,"values":row})
     if w:=odRequest(s,"POST",string(body));w.Code!=200{t.Fatalf("EQ: %d %s",w.Code,w.Body.String())}
     table:=odRead(filepath.Join(s.uiDir(),"output-dsp-v1.conf"));if table[0][0]!=1||table[0][2]!=0{t.Fatal("EQ request changed SUB")}

@@ -22,7 +22,7 @@ jobs:
             gcc -std=c11 -O2 -Wall -Wextra -Werror $flags tools/ui-mod/test_output_dsp_lifecycle.c -lm -o /tmp/od-life
             /tmp/od-life
           done
-          for source in test_output_dsp test_output_dsp_lifecycle test_output_dsp_threads; do
+          for source in test_output_dsp test_output_dsp_lifecycle test_output_dsp_threads test_output_dsp_rates; do
             gcc -std=c11 -O2 -Wall -Wextra -Werror -DOD_FEATURE_EQ=1 -DOD_FEATURE_SUB=1 tools/ui-mod/$source.c -pthread -lm -o /tmp/od-test
             /tmp/od-test
             gcc -std=c11 -O1 -g -fsanitize=address,undefined -fno-omit-frame-pointer -DOD_FEATURE_EQ=1 -DOD_FEATURE_SUB=1 tools/ui-mod/$source.c -pthread -lm -o /tmp/od-san
@@ -31,22 +31,13 @@ jobs:
       - name: Reproducible Mod archives and transactional UI generation
         run: python3 -m unittest discover -s tools/mods -p 'test_output_dsp*.py'
       - name: Install Qt 5 tools on the disposable build runner
-        run: sudo apt-get update && sudo apt-get install -y qmlscene qml-module-qtquick2 qml-module-qtquick-window2 qml-module-qtquick-controls2 qml-module-qtquick-layouts
+        run: sudo apt-get -o Acquire::Retries=1 -o Acquire::http::Timeout=20 -o Acquire::https::Timeout=20 update && sudo apt-get -o Acquire::Retries=1 -o Acquire::http::Timeout=20 -o Acquire::https::Timeout=20 install -y qmlscene qml-module-qtquick2 qml-module-qtquick-window2 qml-module-qtquick-controls2 qml-module-qtquick-layouts
       - name: Qt 5 optional-panel instantiation
         run: python3 tools/ui-mod/test_output_dsp_qml.py
       - name: Existing boot fallback and overlay regression tests (mocked host commands)
         run: |
           bash tests/test_boot_safety.sh
           bash tests/test_rootfs_overlay.sh
-      - uses: actions/setup-go@v5
-        with:
-          go-version-file: go.mod
-      - name: Format, vet, backend and loader race tests
-        run: |
-          gofmt -w pkg/webui/output_dsp*.go
-          python3 -c 'import json,pathlib; print("OD_FORMATTED="+json.dumps({str(p):p.read_text() for p in pathlib.Path("pkg/webui").glob("output_dsp*.go")}))' 
-          go vet ./pkg/webui ./pkg/mods
-          go test -race ./pkg/webui ./pkg/mods
   arm:
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 20
@@ -84,7 +75,30 @@ jobs:
           qemu-arm -L /usr/arm-linux-gnueabihf /tmp/rt-armv7 selftest
       - name: ARMv7 functional tests (emulation is not a real-time certificate)
         run: |
-          for source in test_output_dsp test_output_dsp_lifecycle test_output_dsp_threads; do
+          for source in test_output_dsp test_output_dsp_lifecycle test_output_dsp_threads test_output_dsp_rates; do
             arm-linux-gnueabihf-gcc -mthumb -march=armv7-a -mfpu=neon -mfloat-abi=hard -std=c11 -O2 -DOD_FEATURE_EQ=1 -DOD_FEATURE_SUB=1 tools/ui-mod/$source.c -pthread -lm -o /tmp/od-armv7
             qemu-arm -L /usr/arm-linux-gnueabihf /tmp/od-armv7
           done
+  backend:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Format, vet, backend and loader race tests
+        run: |
+          gofmt -w pkg/webui/output_dsp*.go
+          python3 -c 'import json,pathlib; print("OD_FORMATTED="+json.dumps({str(p):p.read_text() for p in pathlib.Path("pkg/webui").glob("output_dsp*.go")}))' 
+          go vet ./pkg/webui ./pkg/mods
+          go test -race ./pkg/webui ./pkg/mods
+  threads:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Concurrent control publication under ThreadSanitizer
+        run: |
+          gcc -std=c11 -O1 -g -fsanitize=thread -fno-pie -no-pie -DOD_FEATURE_EQ=1 -DOD_FEATURE_SUB=1 tools/ui-mod/test_output_dsp_threads.c -pthread -lm -o /tmp/od-tsan
+          /tmp/od-tsan
