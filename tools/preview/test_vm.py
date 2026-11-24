@@ -12,11 +12,14 @@ from urllib.request import Request, urlopen
 def main():
     parser=argparse.ArgumentParser()
     parser.add_argument('directory',type=Path)
+    parser.add_argument('--initial-launcher',type=Path,help='exercise an existing preview upgrade from an earlier checkout')
     args=parser.parse_args()
     args.directory.mkdir(parents=True,exist_ok=True)
     log=(args.directory/'launcher-test.log').open('w')
     command=[sys.executable,str(Path(__file__).with_name('launch.py')),'--directory',str(args.directory),'--no-browser']
-    process=subprocess.Popen(command,stdout=log,stderr=subprocess.STDOUT)
+    first_command=command.copy()
+    if args.initial_launcher: first_command[1]=str(args.initial_launcher)
+    process=subprocess.Popen(first_command,stdout=log,stderr=subprocess.STDOUT)
 
     def request(path,body=None):
         req=Request('http://127.0.0.1:8765'+path,data=json.dumps(body).encode() if body is not None else None,headers={'Content-Type':'application/json'})
@@ -37,6 +40,8 @@ def main():
                 status=json.loads(request('/api/status'))
                 if status.get('setup')=='failed':
                     raise RuntimeError('guest preview setup failed')
+                if status.get('engine')=='stopped':
+                    raise RuntimeError('original Engine stopped before producing a framebuffer')
                 if status.get('frame',{}).get('width')==1280:
                     break
             except OSError:
@@ -81,14 +86,18 @@ def main():
         assert process.wait(timeout=90)==0, 'VM did not shut down cleanly'
         # Reuse the same disk and seed: the enabled service must start after a
         # real guest shutdown, without rerunning the first-install bootstrap.
-        process=subprocess.Popen(command,stdout=log,stderr=subprocess.STDOUT)
-        deadline=time.monotonic()+240
+        next_command=command.copy()
+        if args.initial_launcher: next_command.insert(2,'update')
+        process=subprocess.Popen(next_command,stdout=log,stderr=subprocess.STDOUT)
+        deadline=time.monotonic()+(600 if args.initial_launcher else 240)
         while time.monotonic()<deadline:
             if process.poll() is not None:
                 raise RuntimeError('second VM boot exited early')
             try:
                 status=json.loads(request('/api/status'))
-                if status.get('frame',{}).get('width')==1280:
+                if status.get('setup')=='failed':
+                    raise RuntimeError('updated preview setup failed')
+                if status.get('frame',{}).get('width')==1280 and status['frame'].get('renderer')=='opengl':
                     break
             except OSError:
                 pass
@@ -96,9 +105,34 @@ def main():
         else:
             raise RuntimeError('original Engine did not return after a full VM restart')
         restored=json.loads(request('/api/feedback',{'note':'second VM boot'}))
-        assert restored['sourceCommit']==report['sourceCommit']
+        assert restored['dspProfiles']==report['dspProfiles'], 'VM settings changed across reboot/update'
+        if args.initial_launcher:
+            assert restored['sourceCommit']!=report['sourceCommit'], 'the old source is still running after update'
+            rendered=subprocess.run([chrome,'--headless','--no-sandbox','--disable-gpu',
+                '--disable-background-networking','--disable-dev-shm-usage','--no-first-run',
+                '--window-size=1600,1000','--virtual-time-budget=4000',
+                '--screenshot='+str(args.directory/'browser-frame.png'),
+                '--dump-dom','http://127.0.0.1:8765'],capture_output=True,text=True,timeout=40)
+            assert rendered.returncode==0 and '/frame.png?frame=' in rendered.stdout
+            print('PASS existing VM upgraded from the raster renderer to OpenGL with the same disk and DSP settings',flush=True)
+        else:
+            assert restored['sourceCommit']==report['sourceCommit']
         request('/api/stop',{})
         assert process.wait(timeout=90)==0, 'second VM shutdown failed'
+        if args.initial_launcher:
+            process=subprocess.Popen(command,stdout=log,stderr=subprocess.STDOUT)
+            deadline=time.monotonic()+240
+            while time.monotonic()<deadline:
+                try:
+                    status=json.loads(request('/api/status'))
+                    if status.get('frame',{}).get('renderer')=='opengl': break
+                except OSError: pass
+                time.sleep(2)
+            else: raise RuntimeError('upgraded VM did not survive a full shutdown and ordinary start')
+            assert json.loads(request('/api/feedback',{}))['sourceCommit']==restored['sourceCommit']
+            request('/api/stop',{})
+            assert process.wait(timeout=90)==0
+            print('PASS upgraded VM survived full shutdown and ordinary start',flush=True)
         print('PASS full local VM: first-install cloud-init, original Engine framebuffer, browser input endpoint, feedback, application restart, full guest shutdown and second boot')
     except BaseException:
         console=args.directory/'console.log'

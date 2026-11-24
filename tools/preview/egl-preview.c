@@ -1,5 +1,6 @@
 // Private QEMU preview adapter: give Qt's minimal EGL platform a fixed pbuffer.
 // No display device, GPU or firmware file is exposed to the host.
+#define _GNU_SOURCE
 #include <dlfcn.h>
 #include <stdlib.h>
 #include <string.h>
@@ -9,6 +10,12 @@
 static int enabled(void) {
     const char *value = getenv("ENGINEX_DESKTOP_PREVIEW");
     return value && !strcmp(value, "1") && !access("/run/enginex-desktop-preview", F_OK);
+}
+
+__attribute__((constructor)) static void isolate_preloads(void) {
+    // Mesa belongs to this Engine process. Non-Qt child programs keep using
+    // the vendor runtime; the already-loaded libraries stay in Engine.
+    if (enabled()) unsetenv("LD_PRELOAD");
 }
 
 EGLBoolean eglChooseConfig(EGLDisplay display, const EGLint *attributes,

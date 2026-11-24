@@ -97,13 +97,14 @@ echo starting > "$work/runtime/engine.state"
 chroot "$root" /usr/bin/env -i PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
     HOME=/tmp/home QT_QPA_PLATFORM=minimalegl QSG_RHI_BACKEND=opengl QSG_RENDER_LOOP=basic \
     EGL_PLATFORM=surfaceless LIBGL_ALWAYS_SOFTWARE=1 GALLIUM_DRIVER=llvmpipe LP_NUM_THREADS=2 \
+    EGL_LOG_LEVEL=debug LIBGL_DEBUG=verbose \
     LIBGL_DRIVERS_PATH=/opt/enginex-preview-mesa/usr/lib/arm-linux-gnueabihf/dri \
     __EGL_VENDOR_LIBRARY_FILENAMES=/opt/enginex-preview-mesa/usr/share/glvnd/egl_vendor.d/50_mesa.json \
     ENGINEX_DESKTOP_PREVIEW=1 MALLOC_ARENA_MAX=1 \
     ENGINEX_PREVIEW_SMOKE="$([ "$PREVIEW_MODE" = smoke ] && echo 1 || true)" \
     QT_DEBUG_PLUGINS="$([ "$PREVIEW_MODE" = smoke ] && echo 1 || echo 0)" \
     QT_PLUGIN_PATH=/usr/local/lib/enginex-preview/plugins:/usr/lib/plugins QT_QPA_GENERIC_PLUGINS=enginexpreview \
-    LD_PRELOAD=/etc/enginex/libengine-ui-hook.so:/usr/local/lib/enginex-preview/egl-preview.so \
+    LD_PRELOAD=/etc/enginex/libengine-ui-hook.so:/usr/local/lib/enginex-preview/egl-preview.so:/opt/enginex-preview-mesa/usr/lib/arm-linux-gnueabihf/libEGL.so.1:/opt/enginex-preview-mesa/usr/lib/arm-linux-gnueabihf/libGLESv2.so.2 \
     /usr/Engine/Engine -d0 > "$work/engine.log" 2>&1 &
 engine=$!
 }
