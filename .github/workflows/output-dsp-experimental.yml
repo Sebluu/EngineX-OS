@@ -31,7 +31,15 @@ jobs:
       - name: Reproducible Mod archives and transactional UI generation
         run: python3 -m unittest discover -s tools/mods -p 'test_output_dsp*.py'
       - name: Install Qt 5 tools on the disposable build runner
-        run: sudo apt-get -o Acquire::Retries=1 -o Acquire::http::Timeout=20 -o Acquire::https::Timeout=20 update && sudo apt-get -o Acquire::Retries=1 -o Acquire::http::Timeout=20 -o Acquire::https::Timeout=20 install -y qmlscene qml-module-qtquick2 qml-module-qtquick-window2 qml-module-qtquick-controls2 qml-module-qtquick-layouts qml-module-qttest qtdeclarative5-dev-tools
+        run: |
+          set -euo pipefail
+          apt_args=(-o Acquire::ForceIPv4=true -o Acquire::Retries=1 -o Acquire::http::Timeout=20 -o Acquire::https::Timeout=20)
+          if test -f /etc/apt/sources.list.d/ubuntu.sources; then
+            apt_args+=(-o Dir::Etc::sourcelist=sources.list.d/ubuntu.sources -o Dir::Etc::sourceparts=-)
+          fi
+          sudo sed -i 's|mirror+file:/etc/apt/apt-mirrors.txt|https://archive.ubuntu.com/ubuntu|g' /etc/apt/sources.list.d/ubuntu.sources
+          sudo apt-get "${apt_args[@]}" update
+          sudo apt-get "${apt_args[@]}" install -y --no-install-recommends qmlscene qml-module-qtquick2 qml-module-qtquick-window2 qml-module-qtquick-controls2 qml-module-qtquick-layouts qml-module-qttest qtdeclarative5-dev-tools
       - name: Qt 5 optional-panel instantiation
         run: python3 tools/ui-mod/test_output_dsp_qml.py
       - name: Existing boot fallback and overlay regression tests (mocked host commands)
@@ -63,7 +71,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Install ARMv7 cross tools on the disposable build runner
-        run: sudo apt-get update && sudo apt-get install -y gcc-arm-linux-gnueabihf binutils-arm-linux-gnueabihf qemu-user
+        run: |
+          set -euo pipefail
+          apt_args=(-o Acquire::ForceIPv4=true -o Acquire::Retries=1 -o Acquire::http::Timeout=20 -o Acquire::https::Timeout=20)
+          if test -f /etc/apt/sources.list.d/ubuntu.sources; then
+            apt_args+=(-o Dir::Etc::sourcelist=sources.list.d/ubuntu.sources -o Dir::Etc::sourceparts=-)
+          fi
+          sudo sed -i 's|mirror+file:/etc/apt/apt-mirrors.txt|https://archive.ubuntu.com/ubuntu|g' /etc/apt/sources.list.d/ubuntu.sources
+          sudo apt-get "${apt_args[@]}" update
+          sudo apt-get "${apt_args[@]}" install -y --no-install-recommends gcc-arm-linux-gnueabihf libc6-dev-armhf-cross binutils-arm-linux-gnueabihf qemu-user
       - name: ARMv7 hook and real callback compile
         run: |
           OUT=/tmp/output-dsp-hook-armv7.so sh tools/ui-mod/build.sh
