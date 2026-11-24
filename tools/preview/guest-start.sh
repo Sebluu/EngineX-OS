@@ -8,6 +8,8 @@ mkdir -p /run/enginex-preview "$work/data"
 echo local-vm-only > /run/enginex-preview-vm
 if [ ! -e "$work/runtime" ]; then ln -s /run/enginex-preview "$work/runtime"; fi
 echo building > "$work/runtime/setup.state"
+echo starting > "$work/runtime/engine.state"
+rm -f "$work/runtime/frame.json" "$work/runtime/frame.png"
 python3 - "$repo/.preview-source-sha" "$work/runtime/build.json" <<'META'
 from pathlib import Path
 import json,sys

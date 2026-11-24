@@ -122,6 +122,8 @@ def main():
                 status=json.loads(request('/api/status'))
                 if status.get('setup')=='failed':
                     raise RuntimeError('updated preview setup failed')
+                if status.get('engine')=='stopped':
+                    raise RuntimeError('updated Engine stopped before producing a framebuffer')
                 if status.get('frame',{}).get('width')==1280 and status['frame'].get('renderer')=='opengl':
                     break
             except OSError:
