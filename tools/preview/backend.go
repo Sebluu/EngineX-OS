@@ -78,15 +78,22 @@ func main() {
 	if _, err := os.Stat("/data/enginex/.desktop-preview-init"); os.IsNotExist(err) {
 		fresh = true
 	}
-	for _, id := range []string{"output-equalizer", "subharmonic-synth", "prime4-steady-leds"} {
+	for _, bundle := range []struct{ id, version string }{
+		{"output-equalizer", "0.1.1"}, {"subharmonic-synth", "0.1.1"}, {"prime4-steady-leds", "0.1.0"},
+	} {
+		id := bundle.id
 		found := false
+		upgrade := false
 		for _, mod := range list {
 			if mod.ID == id {
 				found = true
+				// The first preview seeded 0.1.0. Use the real Mod manager's
+				// upgrade path so enabled state and saved profiles survive.
+				upgrade = mod.Version == "0.1.0" && bundle.version == "0.1.1"
 			}
 		}
-		if !found {
-			f, err := os.Open("/tmp/preview/mods/" + id + "-0.1.0.tar.gz")
+		if !found || upgrade {
+			f, err := os.Open("/tmp/preview/mods/" + id + "-" + bundle.version + ".tar.gz")
 			must(err)
 			_, installErr := manager.InstallArchive(f)
 			must(f.Close())

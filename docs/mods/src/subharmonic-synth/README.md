@@ -1,4 +1,4 @@
-# Subharmonic Synthesizer 0.1.0 (experimental)
+# Subharmonic Synthesizer 0.1.1 (experimental)
 
 QML-only Mod for the original PRIME 4 (JC11), paired with the matching native
 output DSP core. This source is not approved for deck installation. Installing

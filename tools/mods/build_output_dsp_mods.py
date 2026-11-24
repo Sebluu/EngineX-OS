@@ -9,13 +9,14 @@ from pathlib import Path
 import tarfile
 
 ROOT = Path(__file__).resolve().parents[2]
+VERSION = '0.1.1'
 MODS = [('output-equalizer', 'Output Equalizer', 'eq', True, False),
         ('subharmonic-synth', 'Subharmonic Synthesizer', 'sub', False, True)]
 
 def files(mid, title, section, eq, sub):
     panel = (ROOT / 'tools/ui-mod/output_dsp_panel.qml').read_text()
     panel = panel.replace('@SECTION@', section).replace('@EQ@', str(eq).lower()).replace('@SUB@', str(sub).lower())
-    manifest = dict(id=mid, name=title, version='0.1.0', author='Sebluu',
+    manifest = dict(id=mid, name=title, version=VERSION, author='Sebluu',
                     description='Experimental PRIME 4 JC11 controls. Requires the matching native output DSP core; does nothing on stock firmware.',
                     category='audio', homepage='https://github.com/Sebluu/EngineX-OS',
                     qmlFiles={'Panel.qml': f'EngineXMods/{mid}/Panel.qml'})
@@ -28,7 +29,7 @@ def build(destination):
     sums = []
     for mid, title, section, eq, sub in MODS:
         data = files(mid, title, section, eq, sub)
-        path = destination / f'{mid}-0.1.0.tar.gz'
+        path = destination / f'{mid}-{VERSION}.tar.gz'
         with path.open('wb') as raw, gzip.GzipFile(fileobj=raw, mode='wb', mtime=0, filename='') as gz:
             with tarfile.open(fileobj=gz, mode='w') as tar:
                 for name, content in sorted(data.items()):

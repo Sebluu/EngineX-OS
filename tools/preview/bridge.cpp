@@ -53,6 +53,7 @@ class RenderProbe final : public QQuickItem {
 public:
     explicit RenderProbe(QQuickItem *parent) : QQuickItem(parent) {
         setFlag(ItemHasContents, true);
+        setObjectName(QStringLiteral("enginex-preview-render-probe"));
         setX(200); setY(20); setWidth(120); setHeight(120); setZ(100000000);
     }
     QSGNode *updatePaintNode(QSGNode *old, UpdatePaintNodeData *) override {
@@ -160,6 +161,7 @@ void dispatch() {
         } else if (packet[0] == 'D') {
             const char *smoke = getenv("ENGINEX_PREVIEW_SMOKE");
             if (!smoke || !*smoke) continue;
+            if (auto *geometry = target->findChild<QQuickItem *>(QStringLiteral("enginex-preview-render-probe"))) geometry->setVisible(false);
             if (auto *probe = target->findChild<QObject *>(QStringLiteral("enginex-preview-smoke-popup")))
                 QMetaObject::invokeMethod(probe, "close", Qt::DirectConnection);
             for (QObject *panel : uiObjects(target))
@@ -208,10 +210,17 @@ void requestFrame() {
             if (!popup->property("visible").toBool() || !content || content->property("section").toString() != expectedPanel) continue;
             if (content->property("message").toString() == QStringLiteral("Ready")) {
                 bool first = false, second = false;
-                for (QQuickItem *item : content->findChildren<QQuickItem *>()) {
+                QList<QQuickItem *> items{content};
+                for (qsizetype i = 0; i < items.size(); ++i) items.append(items[i]->childItems());
+                QQuickItem *slider = nullptr, *apply = nullptr;
+                for (QQuickItem *item : items) {
                     const QString text = item->property("text").toString();
                     const QString kind = QString::fromLatin1(item->metaObject()->className());
-                    const bool sized = item->isVisible() && item->width() > 1 && item->height() > 1;
+                    const QPointF scene = item->mapToScene(QPointF());
+                    const bool sized = item->isVisible() && item->width() > 1 && item->height() > 1 &&
+                        scene.x() >= 0 && scene.y() >= 0 && scene.x() + item->width() <= target->width() && scene.y() + item->height() <= target->height();
+                    if (sized && item->objectName() == QStringLiteral("outputDSPSubSlider0")) slider = item;
+                    if (sized && item->objectName() == QStringLiteral("outputDSPApply")) apply = item;
                     if (expectedPanel == QStringLiteral("sub")) {
                         if (text == QStringLiteral("Strength %")) first = sized;
                         if (text == QStringLiteral("Maximum sub frequency Hz")) second = sized;
@@ -228,7 +237,13 @@ void requestFrame() {
                     }
                 }
                 panelDiagnosed = true;
-                if (first && second) {
+                if (first && second && (expectedPanel != QStringLiteral("sub") || (slider && apply))) {
+                    if (expectedPanel == QStringLiteral("sub") && slider && apply) {
+                        const QPointF start = slider->mapToScene(QPointF(slider->width() * .3, slider->height() * .5));
+                        const QPointF end = slider->mapToScene(QPointF(slider->width() * .8, slider->height() * .5));
+                        const QPointF save = apply->mapToScene(QPointF(apply->width() * .5, apply->height() * .5));
+                        fprintf(stderr, "PREVIEW_SUB_CONTROLS %.2f %.2f %.2f %.2f %.2f %.2f\n", start.x(), start.y(), end.x(), end.y(), save.x(), save.y());
+                    }
                     fprintf(stderr, "PREVIEW_MOD_PANEL_READY section=%s\n", qPrintable(expectedPanel));
                     panelReported = true;
                     break;

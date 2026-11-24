@@ -203,6 +203,7 @@ def main():
         assert restored['frame'].get('readbackMs') is not None and restored['frame'].get('encodeMs') is not None
         print('Preview frame: readback={} ms, x86 encoding={} ms, age={} ms'.format(restored['frame']['readbackMs'],restored['frame']['encodeMs'],restored['frame'].get('ageMs','unknown')),flush=True)
         assert restored['dspProfiles']==report['dspProfiles'], 'VM settings changed across reboot/update'
+        assert restored['modVersions']=={'output-equalizer':'0.1.1','subharmonic-synth':'0.1.1','prime4-steady-leds':'0.1.0'}, 'installed Mod panels were not upgraded'
         if args.initial_launcher:
             assert restored['sourceCommit']!=report['sourceCommit'], 'the old source is still running after update'
             browser_capture(chrome)

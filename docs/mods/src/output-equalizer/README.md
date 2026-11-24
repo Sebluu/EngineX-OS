@@ -1,4 +1,4 @@
-# Output Equalizer 0.1.0 (experimental)
+# Output Equalizer 0.1.1 (experimental)
 
 QML-only Mod for the original PRIME 4 (JC11). Requires a separately validated
 EngineX build containing the matching output DSP core. Stock EngineX has no
