@@ -71,7 +71,7 @@ static void od_prepare(struct od_cfg *c,const struct od_params *p,unsigned rate)
         if(p->hp>=10){c->filters[8]=od_filter(3,p->hp,.541196,0,rate);c->filters[9]=od_filter(3,p->hp,1.306563,0,rate);}
     }
     if(c->sub)for(int j=0;j<2;j++){
-        double lo=fmax(j?72:48,p->minhz*2),hi=fmin(j?112:72,p->maxhz*2);
+        double lo=fmax(j?72:48,p->minhz*2),hi=fmin(j?160:72,p->maxhz*2);
         if(hi<=lo){c->level[j]=0;continue;}
         c->source[j][0]=od_filter(3,lo,.707,0,rate);c->source[j][1]=od_filter(4,hi,.707,0,rate);
         c->hp[j]=od_filter(3,p->minhz,.707,0,rate);c->lp[j]=od_filter(4,p->maxhz,.707,0,rate);
@@ -109,7 +109,7 @@ static inline void od_sample(struct od_state *s,float *l,float *r) {
             if(s->age[j]<c->rate)s->age[j]++;
             if(v>=0&&s->previous[j]<0){
                 unsigned n=s->age[j];s->age[j]=0;
-                if(n>=c->rate/150&&n<=c->rate/40&&s->envelope[j]>c->threshold)s->sign[j]=s->sign[j]>0?-1:1;
+                if(n>=c->rate/180&&n<=c->rate/40&&s->envelope[j]>c->threshold)s->sign[j]=s->sign[j]>0?-1:1;
                 else s->sign[j]=0;
             }
             s->previous[j]=v;

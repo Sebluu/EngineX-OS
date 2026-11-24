@@ -10305,6 +10305,8 @@ def main():
         for ref in re.findall(r'"qrc:/([^"$%{}+]+\.(?:png|svg|jpg|qml))"', text.replace("%20", " ")):
             if not (a.qrc / ref).is_file():
                 raise SystemExit(f"{rel}: qrc:/{ref} is not in {a.qrc}")
+    from output_dsp_ui import add_output_dsp
+    add_output_dsp(base, a.qrc, ROOT)
     rows = load_dict()
     skip = compared_strings(a.qrc)
     dicts = encoded_dicts(rows)
